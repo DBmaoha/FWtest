@@ -128,7 +128,7 @@ void function PlayerApplesBatteryPackToPort( entity player, entity batteryPort )
     // these are baically atlas's battery animations
 	sequence.thirdPersonAnim 		= "pt_rodeo_ride_r_return_battery"
 	sequence.firstPersonAnim 		= "ptpov_rodeo_ride_r_return_battery"
-    
+
 	EmitSoundOnEntity( player, "rodeo_medium_battery_return_ext" ) // emit sound on player
 
 	player.SetSyncedEntity( ref )
@@ -170,6 +170,12 @@ void function ApplyBatteryToBatteryPort( entity player, entity batteryPort )
     batteryPort.s.batteryPack = battery
     // change turret settings
     SetTeam( nearestTurret, player.GetTeam() )
+    SetTeam( expect entity(nearestTurret.s.minimapstate) , player.GetTeam() )
+    if ( player.GetTeam() == TEAM_IMC )
+        SetGlobalNetInt( expect string(nearestTurret.s.turretflagid) , 2 )
+    if ( player.GetTeam() == TEAM_MILITIA )
+        SetGlobalNetInt( expect string(nearestTurret.s.turretflagid) , 4 )
+
     nearestTurret.SetHealth( nearestTurret.GetMaxHealth() )
     nearestTurret.SetShieldHealth( nearestTurret.GetShieldHealthMax() )
     EmitSoundOnEntityOnlyToPlayer( player, player, "UI_TitanBattery_Pilot_Give_TitanBattery" )
@@ -193,7 +199,7 @@ void function CleanUpBatterySequenceForPlayer( entity player )
 void function DelayedClearSyncedEntityForBatteryApply( entity player, entity batteryPort )
 {
     WaitFrame()
-	
+
     if ( IsValid( player ) && IsValid( batteryPort ) )
         player.SetSyncedEntity( null )
 }
