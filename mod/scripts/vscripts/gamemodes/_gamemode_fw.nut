@@ -11,6 +11,7 @@ global struct TurretSite
 {
     entity site
     entity turret
+    entity minimapstate
 }
 struct {
     array<HarvesterStruct> harvesters
@@ -176,8 +177,10 @@ void function LoadEntities()
                     site.SetValueForModelKey( info_target.GetModelName() )
                     site.SetOrigin( info_target.GetOrigin() )
                     site.SetAngles( info_target.GetAngles() )
+                    SetTeam( site , info_target.GetTeam() )
                     site.kv.solid = SOLID_VPHYSICS
                     DispatchSpawn( site )
+                    turretsite.minimapstate = site
                     turretsite.site = info_target
                     break
 			}
@@ -195,7 +198,7 @@ void function LoadEntities()
                 case "info_fw_battery_port":
                     entity prop = CreatePropDynamic( info_target.GetModelName(), info_target.GetOrigin(), info_target.GetAngles(), 6 )
                     prop.SetUsable()
-                    prop.SetUsePrompts( "", "#FW_USE_BATTERY" )
+                    prop.SetUsePrompts( "", "Press %use% to use battery on turret" )
                     AddCallback_OnUseEntity( prop, FW_OnUseBatteryPort )
                     break
 			}
@@ -384,65 +387,88 @@ void function initNetVars()
         {
             SetGlobalNetEnt( "turretSite1" , turret.turret )
             SetGlobalNetInt("turretStateFlags1" , 1  )
-            thread TurretSiteWatcher(turret.turret)
+            thread TurretSiteWatcher(turret)
         }
         if ( turret.site.kv.turretId == "1" )
         {
             SetGlobalNetEnt( "turretSite2" , turret.turret )
             SetGlobalNetInt("turretStateFlags2" , 1 )
-            thread TurretSiteWatcher(turret.turret)
+            thread TurretSiteWatcher(turret)
         }
         if ( turret.site.kv.turretId == "2" )
         {
             SetGlobalNetEnt( "turretSite3" , turret.turret )
             SetGlobalNetInt("turretStateFlags3" , 1)
-            thread TurretSiteWatcher(turret.turret)
+            thread TurretSiteWatcher(turret)
         }
         if ( turret.site.kv.turretId == "3" )
         {
             SetGlobalNetEnt( "turretSite4" , turret.turret )
             SetGlobalNetInt("turretStateFlags4" , 2 )
-            thread TurretSiteWatcher(turret.turret)
+            thread TurretSiteWatcher(turret)
         }
         if ( turret.site.kv.turretId == "4" )
         {
             SetGlobalNetEnt( "turretSite5" , turret.turret )
             SetGlobalNetInt("turretStateFlags5" , 2 )
-            thread TurretSiteWatcher(turret.turret)
+            thread TurretSiteWatcher(turret)
         }
         if ( turret.site.kv.turretId == "5" )
         {
             SetGlobalNetEnt( "turretSite6" , turret.turret )
             SetGlobalNetInt("turretStateFlags6" , 2 )
-            thread TurretSiteWatcher(turret.turret)
+            thread TurretSiteWatcher(turret)
         }
         if ( turret.site.kv.turretId == "6" )
         {
             SetGlobalNetEnt( "turretSite7" , turret.turret )
             SetGlobalNetInt("turretStateFlags7" , 4 )
-            thread TurretSiteWatcher(turret.turret)
+            thread TurretSiteWatcher(turret)
         }
         if ( turret.site.kv.turretId == "7" )
         {
             SetGlobalNetEnt( "turretSite8" , turret.turret )
             SetGlobalNetInt("turretStateFlags8" , 4)
-            thread TurretSiteWatcher(turret.turret)
+            thread TurretSiteWatcher(turret)
         }
         if ( turret.site.kv.turretId == "8" )
         {
             SetGlobalNetEnt( "turretSite9" , turret.turret )
             SetGlobalNetInt("turretStateFlags9" , 4 )
-            thread TurretSiteWatcher(turret.turret)
+            thread TurretSiteWatcher(turret)
         }
     }
 
 }
 
-void function TurretSiteWatcher( entity turret )
+void function TurretSiteWatcher( TurretSite turret )
 {
-    turret.SetMaxHealth( 20000 )
-    turret.SetHealth( 20000 )
-    turret.SetShieldHealthMax( 10000 )
+    if ( turret.turret.GetTeam() == 3 || turret.turret.GetTeam() == 2 )
+    {
+        turret.minimapstate.Minimap_SetAlignUpright( true )
+	    turret.minimapstate.Minimap_AlwaysShow( TEAM_IMC, null )
+	    turret.minimapstate.Minimap_AlwaysShow( TEAM_MILITIA, null )
+	    turret.minimapstate.Minimap_SetHeightTracking( true )
+	    turret.minimapstate.Minimap_SetZOrder( MINIMAP_Z_OBJECT )
+        turret.minimapstate.Minimap_AlwaysShow( TEAM_IMC, null )
+	    turret.minimapstate.Minimap_AlwaysShow( TEAM_MILITIA, null )
+        turret.minimapstate.Minimap_SetCustomState( eMinimapObject_prop_script.FW_BUILDSITE_SHIELDED )
+    }
+    else
+    {
+        SetTeam( turret.minimapstate , 1 )
+        turret.minimapstate.Minimap_SetAlignUpright( true )
+	    turret.minimapstate.Minimap_AlwaysShow( TEAM_IMC, null )
+	    turret.minimapstate.Minimap_AlwaysShow( TEAM_MILITIA, null )
+	    turret.minimapstate.Minimap_SetHeightTracking( true )
+	    turret.minimapstate.Minimap_SetZOrder( MINIMAP_Z_OBJECT )
+        turret.minimapstate.Minimap_AlwaysShow( TEAM_IMC, null )
+	    turret.minimapstate.Minimap_AlwaysShow( TEAM_MILITIA, null )
+        turret.minimapstate.Minimap_SetCustomState( eMinimapObject_prop_script.FW_BUILDSITE_SHIELDED )
+    }
+    turret.turret.SetMaxHealth( 20000 )
+    turret.turret.SetHealth( 20000 )
+    turret.turret.SetShieldHealthMax( 10000 )
 }
 
 void function HarvesterThink( HarvesterStruct fd_harvester )
