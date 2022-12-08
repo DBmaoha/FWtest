@@ -38,11 +38,26 @@ void function TryUseBatteryPort( entity player, entity batteryPort )
         return
     player.EndSignal( "OnDeath" )
     player.EndSignal( "OnDestroy" )
+    player.EndSignal( "ScriptAnimStop" )
+    AddButtonPressedPlayerInputCallback( player, IN_JUMP, ForceStopUseBatteryPort )
+
+    OnThreadEnd(
+        function():( player )
+        {
+            RemoveButtonPressedPlayerInputCallback( player, IN_JUMP, ForceStopUseBatteryPort )
+        }
+    )
+
     if( IsValid( batteryPort.s.batteryPack ) ) // already has a battery
         return
     if( batteryPort.s.beingUsed ) // already being using
         return
     waitthread PlayerApplesBatteryPackToPort( player, batteryPort )
+}
+
+void function ForceStopUseBatteryPort( entity player )
+{
+    player.Signal( "ScriptAnimStop" )
 }
 
 void function PlayerApplesBatteryPackToPort( entity player, entity batteryPort )
@@ -53,6 +68,7 @@ void function PlayerApplesBatteryPackToPort( entity player, entity batteryPort )
 
 	entity battery = GetBatteryOnBack( player )
 	battery.Hide() //Hide it because the animation has a battery model already
+    Battery_StopFX( battery )
 
 	entity tempBattery3p
 	tempBattery3p = CreatePropDynamic( RODEO_BATTERY_MODEL_FOR_RODEO_ANIMS )
@@ -74,8 +90,11 @@ void function PlayerApplesBatteryPackToPort( entity player, entity batteryPort )
 	OnThreadEnd(
 	function() : ( battery, batteryPort, player, ref, result )
 		{
-			if ( IsValid( battery ) )
+			if ( IsValid( battery ) && !result.success ) // animation interrupted
+            {
 				battery.Show()
+                Battery_StartFX( battery )
+            }
 
             if ( IsValid( batteryPort ) )
                 batteryPort.s.beingUsed = false
@@ -141,9 +160,15 @@ void function ApplyBatteryToBatteryPort( entity player, entity batteryPort )
         return
 
     // player can apply battery
+    // hide icon
+    Battery_StopFX( battery )
+    battery.Minimap_Hide( TEAM_MILITIA, null )
+	battery.Minimap_Hide( TEAM_IMC, null )
+    // be in port
     battery.SetParent( batteryPort, "REF" )
     battery.SetOrigin( < 0,0,5 > ) // offset
     batteryPort.s.batteryPack = battery
+    // change turret settings
     SetTeam( nearestTurret, player.GetTeam() )
     nearestTurret.SetHealth( nearestTurret.GetMaxHealth() )
     nearestTurret.SetShieldHealth( nearestTurret.GetShieldHealthMax() )
