@@ -85,14 +85,14 @@ void function TurretFlagDamageCallback( entity turret , var damageinfo )
 void function TurretFlagOnDamage_threaded( entity turret )
 {
     string flag = expect string( turret.s.turretflagid )
-    if ( turret.GetTeam == TEAM_IMC && GetGlobalNetInt( "turretStateFlags" + flag ) != 26 )
+    if ( turret.GetTeam() == TEAM_IMC && GetGlobalNetInt( "turretStateFlags" + flag ) != 26 )
     {
         SetGlobalNetInt( "turretStateFlags" + flag, 26 )
         wait 2
         SetGlobalNetInt( "turretStateFlags" + flag, 10 )
         return
     }
-    if( turret.GetTeam == TEAM_MILITIA && GetGlobalNetInt( "turretStateFlags" + flag ) != 28 )
+    if( turret.GetTeam() == TEAM_MILITIA && GetGlobalNetInt( "turretStateFlags" + flag ) != 28 )
     {
         SetGlobalNetInt( "turretStateFlags" + flag, 28 )
         wait 2
@@ -103,14 +103,14 @@ void function TurretFlagOnDamage_threaded( entity turret )
 void function NeturalTurretFlagOnDamage_threaded( entity turret )
 {
     string flag = expect string( turret.s.turretflagid )
-    if ( turret.GetTeam == TEAM_IMC && GetGlobalNetInt( "turretStateFlags" + flag ) != 18 )
+    if ( turret.GetTeam() == TEAM_IMC && GetGlobalNetInt( "turretStateFlags" + flag ) != 18 )
     {
         SetGlobalNetInt( "turretStateFlags" + flag, 18 )
         wait 2
         SetGlobalNetInt( "turretStateFlags" + flag, 2 )
         return
     }
-    if( turret.GetTeam == TEAM_MILITIA && GetGlobalNetInt( "turretStateFlags" + flag ) != 21 )
+    if( turret.GetTeam() == TEAM_MILITIA && GetGlobalNetInt( "turretStateFlags" + flag ) != 21 )
     {
         SetGlobalNetInt( "turretStateFlags" + flag, 21 )
         wait 2
