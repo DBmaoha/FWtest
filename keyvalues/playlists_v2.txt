@@ -1,0 +1,63 @@
+playlists
+{
+	Gamemodes
+	{
+		fw
+		{
+			inherit defaults
+			vars
+			{
+				name #PL_fw
+				lobbytitle #PL_fw_lobby
+				description #PL_fw_desc
+				abbreviation #PL_fw_abbr
+					
+				max_players 12
+				max_teams 2
+				classic_mp 1
+				scorelimit 100 // score is a percentage so ofc need max to be 100%
+			}
+		}
+	}
+	Playlists
+	{
+		fw
+		{
+			inherit defaults
+			vars
+			{
+				name #PL_fw
+				lobbytitle #PL_fw_lobby
+				description #PL_fw_desc
+				hint #PL_fw_hint
+				abbreviation #PL_fw_abbr
+				image fw
+				
+				max_players 12
+				max_teams 2
+				classic_mp 1
+				scorelimit 100
+				
+				gamemode_score_hint #GAMEMODE_SCORE_HINT_TDM
+			}	
+			gamemodes
+			{
+				fw
+				{
+					maps
+					{
+						mp_forwardbase_kodai 1
+						mp_grave 1
+						mp_homestead 1
+						mp_thaw 1
+						mp_eden 1
+						mp_crashsite3 1
+						mp_complex3 1
+						mp_colony02 1
+						mp_relic02 1
+					}
+				}
+			}
+		}
+	}
+}
