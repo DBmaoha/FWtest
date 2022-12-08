@@ -37,8 +37,28 @@ void function GamemodeFW_Init()
        AddCallback_GameStateEnter( eGameState.Prematch,FW_createHarvester )
        AddCallback_GameStateEnter( eGameState.Playing,startFWHarvester )
        AddSpawnCallbackEditorClass( "trigger_multiple", "trigger_fw_territory", SetupFWTerritoryTrigger )
+
+       //noneed to use it rn
+       //AddSpawnCallbackEditorClass( "info_target", "info_fw_camp", InitCampTracker )
     }
 }
+
+
+
+void function InitCampTracker( entity camp )
+{
+    print("InitCampTracker InitCampTracker InitCampTracker")
+    entity prop = CreateEntity("prop_script")
+    prop.SetOrigin( camp.GetOrigin() )
+    prop.SetModel($"models/dev/empty_model.mdl")
+    DispatchSpawn( prop )
+    entity tracker = GetAvailableCampLocationTracker()
+    tracker.SetOwner( prop )
+    SetLocationTrackerRadius( tracker , 1200 )
+    DispatchSpawn( tracker )
+}
+
+
 
 
 
@@ -131,24 +151,18 @@ void function LoadEntities()
                     if ( info_target.GetTeam() == 3 )
                     {
                         entity prop = CreatePropDynamic( info_target.GetModelName(), info_target.GetOrigin(), info_target.GetAngles(), 6 )
-                        entity tracker = GetAvailableBaseLocationTracker()
-                        tracker.SetOwner( info_target )
 					    file.harvester1_info = info_target
                         print("fw_tower tracker spawned")
                     }
                     if ( info_target.GetTeam() == 2 )
                     {
                         entity prop = CreatePropDynamic( info_target.GetModelName(), info_target.GetOrigin(), info_target.GetAngles(), 6 )
-                        entity tracker = GetAvailableBaseLocationTracker()
-                        tracker.SetOwner( info_target )
 					    file.harvester2_info = info_target
                         print("fw_tower tracker spawned")
                     }
                     break
                 case "info_fw_camp":
-                    entity tracker = GetAvailableCampLocationTracker()
-                    tracker.SetOwner( info_target )
-                    print("fw_camp tracker spawned")
+                    print("fw_camp spawned")
                     break
                 case "info_fw_turret_site":
                     print("info_fw_turret_siteID : " + expect string(info_target.kv.turretId) )
@@ -225,6 +239,24 @@ void function FW_createHarvester()
 	fw_harvester2.harvester.Minimap_SetCustomState( eMinimapObject_prop_script.FD_HARVESTER )
     AddEntityCallback_OnDamaged( fw_harvester2.harvester, OnHarvesterDamaged )
     fw_harvester2.harvester.SetScriptName("fw_team_tower")
+
+
+
+
+
+    entity tracker1 = GetAvailableBaseLocationTracker( )
+    tracker1.SetOwner(fw_harvester1.harvester)
+    DispatchSpawn( tracker1 )
+    entity tracker2 = GetAvailableBaseLocationTracker( )
+    tracker2.SetOwner(fw_harvester2.harvester)
+    DispatchSpawn( tracker2 )
+    SetLocationTrackerRadius( tracker1 , 3000 )
+    SetLocationTrackerRadius( tracker2 , 3000 )
+
+
+
+
+
 
 
 
@@ -350,55 +382,55 @@ void function initNetVars()
     {
         if ( turret.site.kv.turretId == "0" )
         {
-            SetGlobalNetEnt( "turretSite1" , turret.site )
+            SetGlobalNetEnt( "turretSite1" , turret.turret )
             SetGlobalNetInt("turretStateFlags1" , 1  )
             thread TurretSiteWatcher(turret.turret)
         }
         if ( turret.site.kv.turretId == "1" )
         {
-            SetGlobalNetEnt( "turretSite2" , turret.site )
+            SetGlobalNetEnt( "turretSite2" , turret.turret )
             SetGlobalNetInt("turretStateFlags2" , 1 )
             thread TurretSiteWatcher(turret.turret)
         }
         if ( turret.site.kv.turretId == "2" )
         {
-            SetGlobalNetEnt( "turretSite3" , turret.site )
+            SetGlobalNetEnt( "turretSite3" , turret.turret )
             SetGlobalNetInt("turretStateFlags3" , 1)
             thread TurretSiteWatcher(turret.turret)
         }
         if ( turret.site.kv.turretId == "3" )
         {
-            SetGlobalNetEnt( "turretSite4" , turret.site )
+            SetGlobalNetEnt( "turretSite4" , turret.turret )
             SetGlobalNetInt("turretStateFlags4" , 2 )
             thread TurretSiteWatcher(turret.turret)
         }
         if ( turret.site.kv.turretId == "4" )
         {
-            SetGlobalNetEnt( "turretSite5" , turret.site )
+            SetGlobalNetEnt( "turretSite5" , turret.turret )
             SetGlobalNetInt("turretStateFlags5" , 2 )
             thread TurretSiteWatcher(turret.turret)
         }
         if ( turret.site.kv.turretId == "5" )
         {
-            SetGlobalNetEnt( "turretSite6" , turret.site )
+            SetGlobalNetEnt( "turretSite6" , turret.turret )
             SetGlobalNetInt("turretStateFlags6" , 2 )
             thread TurretSiteWatcher(turret.turret)
         }
         if ( turret.site.kv.turretId == "6" )
         {
-            SetGlobalNetEnt( "turretSite7" , turret.site )
+            SetGlobalNetEnt( "turretSite7" , turret.turret )
             SetGlobalNetInt("turretStateFlags7" , 4 )
             thread TurretSiteWatcher(turret.turret)
         }
         if ( turret.site.kv.turretId == "7" )
         {
-            SetGlobalNetEnt( "turretSite8" , turret.site )
+            SetGlobalNetEnt( "turretSite8" , turret.turret )
             SetGlobalNetInt("turretStateFlags8" , 4)
             thread TurretSiteWatcher(turret.turret)
         }
         if ( turret.site.kv.turretId == "8" )
         {
-            SetGlobalNetEnt( "turretSite9" , turret.site )
+            SetGlobalNetEnt( "turretSite9" , turret.turret )
             SetGlobalNetInt("turretStateFlags9" , 4 )
             thread TurretSiteWatcher(turret.turret)
         }
@@ -408,7 +440,9 @@ void function initNetVars()
 
 void function TurretSiteWatcher( entity turret )
 {
-
+    turret.SetMaxHealth( 20000 )
+    turret.SetHealth( 20000 )
+    turret.SetShieldHealthMax( 10000 )
 }
 
 void function HarvesterThink( HarvesterStruct fd_harvester )
