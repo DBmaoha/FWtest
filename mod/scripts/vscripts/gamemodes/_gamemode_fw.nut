@@ -23,7 +23,7 @@ global struct CampSiteStruct
     string campId // "A", "B", "C"
 }
 
-struct 
+struct
 {
     array<HarvesterStruct> harvesters
     array<entity> camps
@@ -48,6 +48,7 @@ void function GamemodeFW_Init()
        AddCallback_EntitiesDidLoad( LoadEntities )
        AddCallback_GameStateEnter( eGameState.Prematch, FW_createHarvester )
        AddCallback_GameStateEnter( eGameState.Playing, OnFwGamePlaying )
+       AddDamageCallback( "npc_turret_mega" , TurretFlagDamageCallback )
 
        // need to be in LoadEntities(), before harvester creation
        //AddSpawnCallbackEditorClass( "trigger_multiple", "trigger_fw_territory", SetupFWTerritoryTrigger )
@@ -55,6 +56,88 @@ void function GamemodeFW_Init()
        //AddSpawnCallbackEditorClass( "info_target", "info_fw_camp", InitCampTracker )
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+void function TurretFlagDamageCallback( entity turret , var damageinfo )
+{
+    if ( !IsValid( turret ) )
+        return
+    bool isorigin = expect bool( turret.s.IsOrigin )
+    if ( isorigin )
+    {
+        thread TurretFlagOnDamage_threaded( turret )
+        return
+    }
+    thread NeturalTurretFlagOnDamage_threaded( turret )
+}
+void function TurretFlagOnDamage_threaded( entity turret )
+{
+    string flag = expect string( turret.s.turretflagid )
+    if ( turret.GetTeam == TEAM_IMC && GetGlobalNetInt( "turretStateFlags" + flag ) != 26 )
+    {
+        SetGlobalNetInt( "turretStateFlags" + flag, 26 )
+        wait 2
+        SetGlobalNetInt( "turretStateFlags" + flag, 10 )
+        return
+    }
+    if( turret.GetTeam == TEAM_MILITIA && GetGlobalNetInt( "turretStateFlags" + flag ) != 28 )
+    {
+        SetGlobalNetInt( "turretStateFlags" + flag, 28 )
+        wait 2
+        SetGlobalNetInt( "turretStateFlags" + flag, 13 )
+        return
+    }
+}
+void function NeturalTurretFlagOnDamage_threaded( entity turret )
+{
+    string flag = expect string( turret.s.turretflagid )
+    if ( turret.GetTeam == TEAM_IMC && GetGlobalNetInt( "turretStateFlags" + flag ) != 18 )
+    {
+        SetGlobalNetInt( "turretStateFlags" + flag, 18 )
+        wait 2
+        SetGlobalNetInt( "turretStateFlags" + flag, 2 )
+        return
+    }
+    if( turret.GetTeam == TEAM_MILITIA && GetGlobalNetInt( "turretStateFlags" + flag ) != 21 )
+    {
+        SetGlobalNetInt( "turretStateFlags" + flag, 21 )
+        wait 2
+        SetGlobalNetInt( "turretStateFlags" + flag, 4 )
+        return
+    }
+    if ( GetGlobalNetInt( "turretStateFlags" + flag ) != 16 )
+    {
+        SetGlobalNetInt( "turretStateFlags" + flag, 16 )
+        wait 2
+        SetGlobalNetInt( "turretStateFlags" + flag, 1 )
+        return
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 void function RateSpawnpoints_FW( int checkClass, array<entity> spawnpoints, int team, entity player )
 {
@@ -117,12 +200,12 @@ void function InitCampTracker( entity camp )
     SetLocationTrackerRadius( tracker, float( camp.kv.radius ) )
     thread FWAiCampThink( camp )
     DispatchSpawn( tracker )
-    
+
 }
 
 void function FWAiCampThink( entity camp )
 {
-    
+
 }
 
 void function SetupFWTerritoryTrigger( entity trigger )
@@ -569,10 +652,17 @@ void function initNetVars()
         string idString = string( id + 1 )
         int team = turret.turret.GetTeam()
         int stateFlag = 1 // netural
+        turret.turret.s.IsOrigin <- false
         if( team == TEAM_IMC )
-            stateFlag = 2 // 2 means TEAM_IMC
+        {
+            stateFlag = 10 // 10 means origin TEAM_IMC turret
+            turret.turret.s.IsOrigin = true
+        }
         if( team == TEAM_MILITIA )
-            stateFlag = 4 // 2 means TEAM_MILITIA
+        {
+            stateFlag = 13 // 13 means origin TEAM_MILITIA turret
+            turret.turret.s.IsOrigin = true
+        }
 
         SetGlobalNetEnt( "turretSite" + idString, turret.turret )
         SetGlobalNetInt( "turretStateFlags" + idString, stateFlag )
