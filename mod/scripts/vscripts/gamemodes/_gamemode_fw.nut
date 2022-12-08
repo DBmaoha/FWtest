@@ -278,14 +278,14 @@ void function FWAiCampThink( CampSiteStruct campsite )
                     SetGlobalNetInt( alertVarName, FW_MAX_LEVELS - 1 )
                 else
                     SetGlobalNetInt( alertVarName, alertLevel + 1 ) // normal level up
-                SetGlobalNetFloat( stressVarName, 1.0 ) // refill
+                //SetGlobalNetFloat( stressVarName, 1.0 ) // refill
                 AddIgnoredCountToOtherCamps( campsite )
                 break
             }
 
             // update stress bar
             float campStressLeft = float( killsNeeded ) / float( killsToEscalate )
-            SetGlobalNetFloat( stressVarName, campStressLeft )
+            //SetGlobalNetFloat( stressVarName, campStressLeft )
             //print( "campStressLeft: " + string( campStressLeft ) )
 
             if( maxSpawnCount - npcsLeft >= countPerSpawn && killsNeeded >= countPerSpawn ) // keep spawning
@@ -994,7 +994,7 @@ void function initNetVars()
         {
             camp.campId = "A"
             SetGlobalNetInt( "fwCampAlertA", 0 )
-            SetGlobalNetFloat( "fwCampStressA", 1.0 )
+            //SetGlobalNetFloat( "fwCampStressA", 1.0 )
             SetLocationTrackerID( camp.tracker, 0 )
             file.trackedCampNPCSpawns["A"] <- {}
             continue
@@ -1003,7 +1003,7 @@ void function initNetVars()
         {
             camp.campId = "B"
             SetGlobalNetInt( "fwCampAlertB", 0 )
-            SetGlobalNetFloat( "fwCampStressB", 1.0 )
+            //SetGlobalNetFloat( "fwCampStressB", 1.0 )
             SetLocationTrackerID( camp.tracker, 1 )
             file.trackedCampNPCSpawns["B"] <- {}
             continue
@@ -1012,7 +1012,7 @@ void function initNetVars()
         {
             camp.campId = "C"
             SetGlobalNetInt( "fwCampAlertC", 0 )
-            SetGlobalNetFloat( "fwCampStressC", 1.0 )
+            //SetGlobalNetFloat( "fwCampStressC", 1.0 )
             SetLocationTrackerID( camp.tracker, 2 )
             file.trackedCampNPCSpawns["C"] <- {}
             continue
