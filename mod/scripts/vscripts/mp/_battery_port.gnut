@@ -30,10 +30,9 @@ void function TryUseBatteryPort( entity player, entity batteryPort )
 {
     if( !PlayerHasBattery( player ) )
         return
-
-    print( "try to playAnim for batteryPort" )
+    player.EndSignal( "OnDeath" )
+    player.EndSignal( "OnDestroy" )
     waitthread PlayerApplesBatteryPackToPort( player, batteryPort )
-    print( "animation done" )
 }
 
 void function PlayerApplesBatteryPackToPort( entity player, entity batteryPort )
@@ -54,9 +53,6 @@ void function PlayerApplesBatteryPackToPort( entity player, entity batteryPort )
 	tempBattery1p.SetParent( player.GetFirstPersonProxy(), "R_HAND", false, 0.0 )
 	tempBattery1p.RemoveFromSpatialPartition()
 
-    tempBattery1p.SetSkin( 2 )
-    tempBattery3p.SetSkin( 2 )
-
 	player.p.rodeoAnimTempProps.append( tempBattery3p )
 	player.p.rodeoAnimTempProps.append( tempBattery1p )
 
@@ -69,7 +65,9 @@ void function PlayerApplesBatteryPackToPort( entity player, entity batteryPort )
 			if ( !IsValid( player ) )
 				return
 
+            DeployAndEnableWeapons( player )
 			ClearApplyBatteryAnimTempProps( player )
+            thread DelayedClearSyncedEntityForBatteryApply( player, batteryPort )
 
 			StopSoundOnEntity( player, "rodeo_medium_battery_return_ext" )
 
@@ -77,6 +75,8 @@ void function PlayerApplesBatteryPackToPort( entity player, entity batteryPort )
             {
                 ApplyBatteryToBatteryPort( player, batteryPort )
             }
+
+            CleanUpBatterySequenceForPlayer( player )
 		}
 	)
 
@@ -84,49 +84,67 @@ void function PlayerApplesBatteryPackToPort( entity player, entity batteryPort )
 	sequence.attachment = "REF" // only ref the batteryPort has
 
     // these are baically atlas's battery animations
-	sequence.thirdPersonAnim 		= "pt_rodeo_back_r_apply_battery"
-	sequence.firstPersonAnim 		= "ptpov_rodeo_back_r_apply_battery"
+	sequence.thirdPersonAnim 		= "pt_rodeo_ride_r_return_battery"
+	sequence.firstPersonAnim 		= "ptpov_rodeo_ride_r_return_battery"
     
 	EmitSoundOnEntity( player, "rodeo_medium_battery_return_ext" ) // emit sound on player
 
 	player.SetSyncedEntity( batteryPort )
+    HolsterAndDisableWeapons( player )
 
-	waitthread FirstPersonSequence( sequence, player, batteryPort )
-    data.success = true
+    float sequenceDuration = player.GetSequenceDuration( sequence.thirdPersonAnim )
+    // thread so we can set things inside sequence
+	thread FirstPersonSequence( sequence, player, batteryPort )
+    //player.SetOrigin( < -20,0,-5 > )
+
+    wait sequenceDuration
+    result.success = true
 }
 
 void function PlayerRemoveBatteryPackFromPort( entity player, entity batteryPort )
 {
-    
+
 }
 
-void function PlayerApplyBatteryPackToPort( entity player, entity batteryPort )
+void function ApplyBatteryToBatteryPort( entity player, entity batteryPort )
 {
     entity battery = Rodeo_TakeBatteryAwayFromPilot( player )
-
-    if( IsValid( battery ) )
-    {
-        battery.SetParent( batteryPort, "REF" )
-        battery.SetOrigin( < 0,0,5 > ) // offset
-    }
+    if( !IsValid( battery ) )
+        return
 
     entity nearestTurret = GetNearestMegaTurret( batteryPort ) // consider this is the nearst
+    if( !IsValid( nearestTurret ) )
+        return
+
+    // player can apply battery
+    battery.SetParent( batteryPort, "REF" )
+    battery.SetOrigin( < 0,0,5 > ) // offset
     nearestTurret.SetHealth( nearestTurret.GetMaxHealth() )
     nearestTurret.SetShieldHealth( nearestTurret.GetShieldHealthMax() )
+    EmitSoundOnEntityOnlyToPlayer( player, player, "UI_TitanBattery_Pilot_Give_TitanBattery" )
 }
 
 entity function GetNearestMegaTurret( entity ent )
 {
     array<entity> allTurrets = GetNPCArrayByClass( "npc_turret_mega" )
-    entity turret = GetClosest( allTurrets, batteryPort.GetOrigin(), 9999 ) // get nearest turret
+    entity turret = GetClosest( allTurrets, ent.GetOrigin(), 9999 ) // get nearest turret
     return turret
 }
 
-void function DelayedClearSyncedEntityForBatteryApply( entity player )
+void function CleanUpBatterySequenceForPlayer( entity player )
+{
+    ClearPlayerAnimViewEntity( player )
+    player.AnimViewEntity_SetLerpOutTime( 0.4 ) // blend out the clear anim view entity
+    player.ClearParent()
+    player.Anim_Stop()
+}
+
+void function DelayedClearSyncedEntityForBatteryApply( entity player, entity batteryPort )
 {
     WaitFrame()
 	
-    if( IsValid( player ) )
+    if( IsValid( player ) && IsValid( batteryPort ) )
+        player.SetSyncedEntity( null )
 }
 
 void function ClearApplyBatteryAnimTempProps( entity player )
