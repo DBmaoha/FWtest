@@ -140,10 +140,7 @@ void function EntityEnterFWTrig( entity trigger, entity ent, entity caller, var 
     if ( ent.GetTeam() == TEAM_MILITIA )
     {
         if ( Distance( trigger.GetOrigin() , fw_harvesterMlt.harvester.GetOrigin() ) > Distance( trigger.GetOrigin() , fw_harvesterImc.harvester.GetOrigin() ) )
-        {
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyEnterEnemyArea" )
-            thread EnemyAreaThreatLevelThink( ent )
-        }
         else
         {
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyEnterFriendlyArea" )
@@ -154,8 +151,6 @@ void function EntityEnterFWTrig( entity trigger, entity ent, entity caller, var 
     {
         if ( Distance( trigger.GetOrigin() , fw_harvesterMlt.harvester.GetOrigin() ) > Distance( trigger.GetOrigin() , fw_harvesterImc.harvester.GetOrigin() ) )
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyEnterFriendlyArea" )
-            thread PlayerInAreaThink( ent , TEAM_IMC )
-        }
         else
         {
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyEnterEnemyArea" )
@@ -163,6 +158,7 @@ void function EntityEnterFWTrig( entity trigger, entity ent, entity caller, var 
         }
     }
 }
+
 void function EntityLeaveFWTrig( entity trigger, entity ent, entity caller, var value )
 {
     if( !IsValid(ent) )
@@ -185,6 +181,7 @@ void function EntityLeaveFWTrig( entity trigger, entity ent, entity caller, var 
     if ( ent.GetTeam() == TEAM_IMC )
     {
         if ( Distance( trigger.GetOrigin() , fw_harvesterMlt.harvester.GetOrigin() ) > Distance( trigger.GetOrigin() , fw_harvesterImc.harvester.GetOrigin() ) )
+        { 
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyExitFriendlyArea" )
             thread PlayerLeaveAreaThink( ent , TEAM_IMC )
         }
