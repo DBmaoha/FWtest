@@ -7,16 +7,22 @@ global HarvesterStruct& fw_harvester2
 
 
 //array< HarvesterStruct& > harvesters = [ fw_harvester1 , fw_harvester2 ]
+global struct TurretSite
+{
+    entity site
+    entity turret
+}
 struct {
     array<HarvesterStruct> harvesters
-    array<entity> turretsites
-    array<entity> megaturrets
+    array<entity> camps
+    array<TurretSite> turretsites
+    array<entity> etitaninmlt
+    array<entity> etitaninimc
     entity harvester1_info
     entity harvester2_info
     bool havesterWasDamaged
 	bool harvesterShieldDown
 	float harvesterDamageTaken
-    array<entity> powerupSpawns
 }file
 
 
@@ -30,11 +36,6 @@ void function GamemodeFW_Init()
        AddCallback_EntitiesDidLoad( LoadEntities )
        AddCallback_GameStateEnter( eGameState.Prematch,FW_createHarvester )
        AddCallback_GameStateEnter( eGameState.Playing,startFWHarvester )
-       ////battery spawn
-       SH_PowerUp_Init()
-       AddCallback_OnTouchHealthKit( "item_powerup", OnPowerupCollected )
-	   AddCallback_GameStateEnter( eGameState.Prematch, RespawnPowerups )
-       ////
        AddSpawnCallbackEditorClass( "trigger_multiple", "trigger_fw_territory", SetupFWTerritoryTrigger )
     }
 }
@@ -129,36 +130,41 @@ void function LoadEntities()
 				case "info_fw_team_tower":
                     if ( info_target.GetTeam() == 3 )
                     {
-                        entity prop = CreateEntity("script_ref")
-                        prop.SetModel(info_target.GetModelName())
-                        prop.SetOrigin(info_target.GetOrigin())
-                        prop.SetAngles(info_target.GetAngles())
-                        DispatchSpawn(prop)
+                        entity prop = CreatePropDynamic( info_target.GetModelName(), info_target.GetOrigin(), info_target.GetAngles(), 6 )
+                        entity tracker = GetAvailableBaseLocationTracker()
+                        tracker.SetOwner( info_target )
 					    file.harvester1_info = info_target
-                        print( "harvester1 : " + info_target.kv.editorclass )
+                        print("fw_tower tracker spawned")
                     }
                     if ( info_target.GetTeam() == 2 )
                     {
                         entity prop = CreatePropDynamic( info_target.GetModelName(), info_target.GetOrigin(), info_target.GetAngles(), 6 )
+                        entity tracker = GetAvailableBaseLocationTracker()
+                        tracker.SetOwner( info_target )
 					    file.harvester2_info = info_target
-                        print( "harvester2 : " + info_target.kv.editorclass )
+                        print("fw_tower tracker spawned")
                     }
                     break
                 case "info_fw_camp":
+                    entity tracker = GetAvailableCampLocationTracker()
+                    tracker.SetOwner( info_target )
+                    print("fw_camp tracker spawned")
                     break
                 case "info_fw_turret_site":
                     print("info_fw_turret_siteID : " + expect string(info_target.kv.turretId) )
+                    TurretSite turretsite
+                    file.turretsites.append( turretsite )
                     entity turret = CreateNPC( "npc_turret_mega", info_target.GetTeam(), info_target.GetOrigin(), info_target.GetAngles() )
                     SetSpawnOption_AISettings( turret, "npc_turret_mega_fortwar" )
                     DispatchSpawn( turret )
-                    file.megaturrets.append(turret)
+                    turretsite.turret = turret
                     entity site = CreateEntity( "prop_script" )
                     site.SetValueForModelKey( info_target.GetModelName() )
                     site.SetOrigin( info_target.GetOrigin() )
                     site.SetAngles( info_target.GetAngles() )
                     site.kv.solid = SOLID_VPHYSICS
                     DispatchSpawn( site )
-                    file.turretsites.append(info_target)
+                    turretsite.site = info_target
                     break
 			}
 		}
@@ -173,7 +179,6 @@ void function LoadEntities()
                     entity prop = CreatePropDynamic( info_target.GetModelName(), info_target.GetOrigin(), info_target.GetAngles(), 6 )
                     break
                 case "info_fw_battery_port":
-                    AddPowerupSpawn( info_target )
                     entity prop = CreatePropDynamic( info_target.GetModelName(), info_target.GetOrigin(), info_target.GetAngles(), 6 )
                     prop.SetUsable()
                     prop.SetUsePrompts( "", "#FW_USE_BATTERY" )
@@ -247,7 +252,7 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
     }
     /*if ( harvester.GetShieldHealth() > 0 )
         GameRules_SetTeamScore2( harvester.GetTeam() , 1.0 * harvester.GetShieldHealth()/harvester.GetShieldHealthMax() * 100 )*/
-    else
+    //else
         GameRules_SetTeamScore( harvester.GetTeam() , 1.0 * harvester.GetHealth()/harvester.GetMaxHealth() * 100 )
 
 
@@ -270,7 +275,10 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
         if ( harvester.GetShieldHealth() == 0 )
         {
             if ( !attacker.IsTitan() && attacker.IsPlayer() )
+            {
                 Remote_CallFunction_NonReplay( attacker , "ServerCallback_FW_NotifyTitanRequired" )
+                DamageInfo_SetDamage( damageInfo , 0 )
+            }
             if( !harvesterstruct.harvesterShieldDown )
             {
                 PlayFactionDialogueToTeam( "fortwar_baseShieldDownFriendly", harvester.GetTeam() )
@@ -337,63 +345,68 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
 
 void function initNetVars()
 {
-    foreach( turret in file.megaturrets )
-    {
-        turret.Minimap_SetAlignUpright( true )
-	    turret.Minimap_AlwaysShow( TEAM_IMC, null )
-	    turret.Minimap_AlwaysShow( TEAM_MILITIA, null )
-	    turret.Minimap_SetHeightTracking( true )
-	    turret.Minimap_SetZOrder( MINIMAP_Z_OBJECT )
-	    turret.Minimap_SetCustomState( eMinimapObject_prop_script.FW_BUILDSITE_TURRET )
-    }
     foreach( turret in file.turretsites )
     {
-        if ( turret.kv.turretId == "0" )
+        if ( turret.site.kv.turretId == "0" )
         {
-            SetGlobalNetEnt( "turretSite1" , turret )
-            SetGlobalNetInt("turretStateFlags1" , turret.GetTeam()  )
+            SetGlobalNetEnt( "turretSite1" , turret.site )
+            SetGlobalNetInt("turretStateFlags1" , 1  )
+            thread TurretSiteWatcher(turret.turret)
         }
-        if ( turret.kv.turretId == "1" )
+        if ( turret.site.kv.turretId == "1" )
         {
-            SetGlobalNetEnt( "turretSite2" , turret )
-            SetGlobalNetInt("turretStateFlags2" , turret.GetTeam()  )
+            SetGlobalNetEnt( "turretSite2" , turret.site )
+            SetGlobalNetInt("turretStateFlags2" , 1 )
+            thread TurretSiteWatcher(turret.turret)
         }
-        if ( turret.kv.turretId == "2" )
+        if ( turret.site.kv.turretId == "2" )
         {
-            SetGlobalNetEnt( "turretSite3" , turret )
-            SetGlobalNetInt("turretStateFlags3" , turret.GetTeam()  )
+            SetGlobalNetEnt( "turretSite3" , turret.site )
+            SetGlobalNetInt("turretStateFlags3" , 1)
+            thread TurretSiteWatcher(turret.turret)
         }
-        if ( turret.kv.turretId == "3" )
+        if ( turret.site.kv.turretId == "3" )
         {
-            SetGlobalNetEnt( "turretSite4" , turret )
-            SetGlobalNetInt("turretStateFlags4" , turret.GetTeam()  )
+            SetGlobalNetEnt( "turretSite4" , turret.site )
+            SetGlobalNetInt("turretStateFlags4" , 2 )
+            thread TurretSiteWatcher(turret.turret)
         }
-        if ( turret.kv.turretId == "4" )
+        if ( turret.site.kv.turretId == "4" )
         {
-            SetGlobalNetEnt( "turretSite5" , turret )
-            SetGlobalNetInt("turretStateFlags5" , turret.GetTeam()  )
+            SetGlobalNetEnt( "turretSite5" , turret.site )
+            SetGlobalNetInt("turretStateFlags5" , 2 )
+            thread TurretSiteWatcher(turret.turret)
         }
-        if ( turret.kv.turretId == "5" )
+        if ( turret.site.kv.turretId == "5" )
         {
-            SetGlobalNetEnt( "turretSite6" , turret )
-            SetGlobalNetInt("turretStateFlags6" , turret.GetTeam()  )
+            SetGlobalNetEnt( "turretSite6" , turret.site )
+            SetGlobalNetInt("turretStateFlags6" , 2 )
+            thread TurretSiteWatcher(turret.turret)
         }
-        if ( turret.kv.turretId == "6" )
+        if ( turret.site.kv.turretId == "6" )
         {
-            SetGlobalNetEnt( "turretSite7" , turret )
-            SetGlobalNetInt("turretStateFlags7" , turret.GetTeam()  )
+            SetGlobalNetEnt( "turretSite7" , turret.site )
+            SetGlobalNetInt("turretStateFlags7" , 4 )
+            thread TurretSiteWatcher(turret.turret)
         }
-        if ( turret.kv.turretId == "7" )
+        if ( turret.site.kv.turretId == "7" )
         {
-            SetGlobalNetEnt( "turretSite8" , turret )
-            SetGlobalNetInt("turretStateFlags8" , turret.GetTeam()  )
+            SetGlobalNetEnt( "turretSite8" , turret.site )
+            SetGlobalNetInt("turretStateFlags8" , 4)
+            thread TurretSiteWatcher(turret.turret)
         }
-        if ( turret.kv.turretId == "8" )
+        if ( turret.site.kv.turretId == "8" )
         {
-            SetGlobalNetEnt( "turretSite9" , turret )
-            SetGlobalNetInt("turretStateFlags9" , turret.GetTeam()  )
+            SetGlobalNetEnt( "turretSite9" , turret.site )
+            SetGlobalNetInt("turretStateFlags9" , 4 )
+            thread TurretSiteWatcher(turret.turret)
         }
     }
+
+}
+
+void function TurretSiteWatcher( entity turret )
+{
 
 }
 
@@ -531,94 +544,3 @@ void function UpdateHarvesterHealth( int team )
 
 
 
-
-
-
-void function AddPowerupSpawn( entity spawnpoint )
-{
-	file.powerupSpawns.append( spawnpoint )
-}
-
-void function RespawnPowerups()
-{
-	foreach ( entity spawnpoint in file.powerupSpawns )
-	{
-		PowerUp powerupDef = GetPowerUpFromItemRef( "mp_loot_titan_build_credit_lts" )
-		thread PowerupSpawnerThink( spawnpoint, powerupDef )
-	}
-}
-
-void function PowerupSpawnerThink( entity spawnpoint, PowerUp powerupDef )
-{
-	svGlobal.levelEnt.EndSignal( "CleanUpEntitiesForRoundEnd" )
-
-	entity base = CreatePropDynamic( powerupDef.baseModel, spawnpoint.GetOrigin(), spawnpoint.GetAngles(), 2 )
-	OnThreadEnd( function() : ( base )
-	{
-		base.Destroy()
-	})
-
-	while ( true )
-	{
-		if ( !powerupDef.spawnFunc() )
-			return
-
-		entity powerup = CreateEntity( "item_powerup" )
-
-		powerup.SetOrigin( base.GetOrigin() + powerupDef.modelOffset )
-		powerup.SetAngles( base.GetAngles() + powerupDef.modelAngles )
-		powerup.SetValueForModelKey( powerupDef.model )
-		powerup.s.powerupRef <- powerupDef.itemRef // this needs to be done before dispatchspawn since OnPowerupCollected will run as soon as we call dispatchspawn if there's a player on battery as it spawns
-
-		DispatchSpawn( powerup )
-
-		// unless i'm doing something really dumb, this all has to be done after dispatchspawn to get the powerup to not have gravity
-		powerup.StopPhysics()
-		powerup.SetOrigin( base.GetOrigin() + powerupDef.modelOffset )
-		powerup.SetAngles( base.GetAngles() + powerupDef.modelAngles )
-
-		powerup.SetModel( powerupDef.model )
-
-		PickupGlow glow = CreatePickupGlow( powerup, powerupDef.glowColor.x.tointeger(), powerupDef.glowColor.y.tointeger(), powerupDef.glowColor.z.tointeger() )
-		glow.glowFX.SetOrigin( spawnpoint.GetOrigin() ) // want the glow to be parented to the powerup, but have the position of the spawnpoint
-
-		OnThreadEnd( function() : ( powerup )
-		{
-			if ( IsValid( powerup ) )
-				powerup.Destroy()
-		})
-
-		powerup.WaitSignal( "OnDestroy" )
-		wait powerupDef.respawnDelay
-	}
-}
-
-bool function OnPowerupCollected( entity player, entity healthpack )
-{
-	PowerUp powerup = GetPowerUpFromItemRef( "mp_loot_titan_build_credit_lts" )
-
-	if ( powerup.titanPickup == player.IsTitan() )
-	{
-		// hack because i couldn't figure out any other way to do this without modifying sh_powerup
-		// ensure we don't kill the powerup if it's a battery the player can't pickup
-		if ( powerup.index == ePowerUps.titanTimeReduction || powerup.index == ePowerUps.LTS_TitanTimeReduction )
-		{
-			if ( player.IsTitan() )
-				return false
-
-			if ( PlayerHasMaxBatteryCount( player ) )
-				return false
-
-			// this is seemingly innacurate to what fra actually did, but for whatever reason embarking with >1 bat crashes in vanilla code
-			// so idk this is easier
-			if ( GAMETYPE == FREE_AGENCY && ( IsValid( player.GetPetTitan() ) || IsTitanAvailable( player ) ) && GetPlayerBatteryCount( player ) > 0 )
-				return false
-		}
-
-		// idk why the powerup.destroyFunc doesn't just return a bool? would mean they could just handle stuff like this in powerup code
-		powerup.destroyFunc( player )
-		return true // destroys the powerup
-	}
-
-	return false // keeps powerup alive
-}
