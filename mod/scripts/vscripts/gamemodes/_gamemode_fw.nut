@@ -142,10 +142,7 @@ void function EntityEnterFWTrig( entity trigger, entity ent, entity caller, var 
         if ( Distance( trigger.GetOrigin() , fw_harvesterMlt.harvester.GetOrigin() ) > Distance( trigger.GetOrigin() , fw_harvesterImc.harvester.GetOrigin() ) )
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyEnterEnemyArea" )
         else
-        {
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyEnterFriendlyArea" )
-            thread PlayerInAreaThink( ent , TEAM_MILITIA )
-        }
     }
     if ( ent.GetTeam() == TEAM_IMC )
     {
