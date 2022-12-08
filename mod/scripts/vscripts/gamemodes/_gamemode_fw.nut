@@ -197,8 +197,9 @@ void function LoadEntities()
                     break
                 case "info_fw_battery_port":
                     entity prop = CreatePropDynamic( info_target.GetModelName(), info_target.GetOrigin(), info_target.GetAngles(), 6 )
+                    prop.kv.fadedist = 10000 // try not to fade
                     prop.SetUsable()
-                    prop.SetUsePrompts( "", "Press %use% to use battery on turret" )
+                    prop.SetUsePrompts( "#FW_USE_TURRET_GENERATOR", "#FW_USE_TURRET_GENERATOR_PC" )
                     AddCallback_OnUseEntity( prop, FW_OnUseBatteryPort )
                     break
 			}
