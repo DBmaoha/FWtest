@@ -445,24 +445,14 @@ void function TurretSiteWatcher( TurretSite turret )
 {
     if ( turret.turret.GetTeam() == 3 || turret.turret.GetTeam() == 2 )
     {
-        turret.minimapstate.Minimap_SetAlignUpright( true )
 	    turret.minimapstate.Minimap_AlwaysShow( TEAM_IMC, null )
-	    turret.minimapstate.Minimap_AlwaysShow( TEAM_MILITIA, null )
-	    turret.minimapstate.Minimap_SetHeightTracking( true )
-	    turret.minimapstate.Minimap_SetZOrder( MINIMAP_Z_OBJECT )
-        turret.minimapstate.Minimap_AlwaysShow( TEAM_IMC, null )
 	    turret.minimapstate.Minimap_AlwaysShow( TEAM_MILITIA, null )
         turret.minimapstate.Minimap_SetCustomState( eMinimapObject_prop_script.FW_BUILDSITE_SHIELDED )
     }
     else
     {
         SetTeam( turret.minimapstate , 1 )
-        turret.minimapstate.Minimap_SetAlignUpright( true )
 	    turret.minimapstate.Minimap_AlwaysShow( TEAM_IMC, null )
-	    turret.minimapstate.Minimap_AlwaysShow( TEAM_MILITIA, null )
-	    turret.minimapstate.Minimap_SetHeightTracking( true )
-	    turret.minimapstate.Minimap_SetZOrder( MINIMAP_Z_OBJECT )
-        turret.minimapstate.Minimap_AlwaysShow( TEAM_IMC, null )
 	    turret.minimapstate.Minimap_AlwaysShow( TEAM_MILITIA, null )
         turret.minimapstate.Minimap_SetCustomState( eMinimapObject_prop_script.FW_BUILDSITE_SHIELDED )
     }
