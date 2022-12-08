@@ -1,4 +1,4 @@
-
+untyped
 global function InitTurretBatteryPort
 global function TryUseBatteryPort
 
@@ -17,6 +17,11 @@ struct
 
 void function InitTurretBatteryPort( entity batteryPort )
 {
+    batteryPort.s.hasBattery <- false               // bool
+    batteryPort.s.batteryPack <- null               // entity
+    batteryPort.s.beingUsed <- false                // bool
+
+    /* // not used yet
     array<entity> allTurrets = GetNPCArrayByClass( "npc_turret_mega" )
     entity turret = GetClosest( allTurrets, batteryPort.GetOrigin(), 9999 ) // get nearest turret
     BatteryPortStruct initStruct
@@ -24,6 +29,7 @@ void function InitTurretBatteryPort( entity batteryPort )
     initStruct.turret = turret
     initStruct.hasBattery = false
     initStruct.lastBatteryAppliedTime = -1.0 // not used yet
+    */
 }
 
 void function TryUseBatteryPort( entity player, entity batteryPort )
@@ -32,6 +38,10 @@ void function TryUseBatteryPort( entity player, entity batteryPort )
         return
     player.EndSignal( "OnDeath" )
     player.EndSignal( "OnDestroy" )
+    if( IsValid( batteryPort.s.batteryPack ) ) // already has a battery
+        return
+    if( batteryPort.s.beingUsed ) // already being using
+        return
     waitthread PlayerApplesBatteryPackToPort( player, batteryPort )
 }
 
@@ -39,6 +49,7 @@ void function PlayerApplesBatteryPackToPort( entity player, entity batteryPort )
 {
     table result = {}
     result.success <- false
+    batteryPort.s.beingUsed = true
 
 	entity battery = GetBatteryOnBack( player )
 	battery.Hide() //Hide it because the animation has a battery model already
@@ -56,27 +67,39 @@ void function PlayerApplesBatteryPackToPort( entity player, entity batteryPort )
 	player.p.rodeoAnimTempProps.append( tempBattery3p )
 	player.p.rodeoAnimTempProps.append( tempBattery1p )
 
+    entity ref = CreateScriptMover() // use a ref to play animations
+    ref.SetOrigin( batteryPort.GetOrigin() + < 40,0,-35 > ) // offset for animation
+    //ref.SetAngles( < 0, player.EyeAngles().y, 0 > ) // sync player's eyeAngle
+
 	OnThreadEnd(
-	function() : ( battery, batteryPort, player, result )
+	function() : ( battery, batteryPort, player, ref, result )
 		{
 			if ( IsValid( battery ) )
 				battery.Show()
 
-			if ( !IsValid( player ) )
-				return
+            if ( IsValid( batteryPort ) )
+                batteryPort.s.beingUsed = false
 
-            DeployAndEnableWeapons( player )
-			ClearApplyBatteryAnimTempProps( player )
-            thread DelayedClearSyncedEntityForBatteryApply( player, batteryPort )
-
-			StopSoundOnEntity( player, "rodeo_medium_battery_return_ext" )
-
-            if( result.success ) // successfully applied battery
+			if ( IsValid( player ) )
             {
-                ApplyBatteryToBatteryPort( player, batteryPort )
+                DeployAndEnableWeapons( player )
+                ClearApplyBatteryAnimTempProps( player )
+                thread DelayedClearSyncedEntityForBatteryApply( player, batteryPort )
+                PutEntityInSafeSpot( player, player, null, player.GetOrigin() + <0, 0, 32>, player.GetOrigin() )
+
+                StopSoundOnEntity( player, "rodeo_medium_battery_return_ext" )
+
+                if( result.success ) // successfully applied battery
+                {
+                    ApplyBatteryToBatteryPort( player, batteryPort )
+                }
+
+                CleanUpBatterySequenceForPlayer( player )
             }
 
-            CleanUpBatterySequenceForPlayer( player )
+            // remove ref after cleaned sequence
+            if ( IsValid( ref ) )
+                ref.Destroy()
 		}
 	)
 
@@ -89,15 +112,14 @@ void function PlayerApplesBatteryPackToPort( entity player, entity batteryPort )
     
 	EmitSoundOnEntity( player, "rodeo_medium_battery_return_ext" ) // emit sound on player
 
-	player.SetSyncedEntity( batteryPort )
+	player.SetSyncedEntity( ref )
     HolsterAndDisableWeapons( player )
 
     float sequenceDuration = player.GetSequenceDuration( sequence.thirdPersonAnim )
     // thread so we can set things inside sequence
-	thread FirstPersonSequence( sequence, player, batteryPort )
-    //player.SetOrigin( < -20,0,-5 > )
+	thread FirstPersonSequence( sequence, player, ref )
 
-    wait sequenceDuration
+    wait sequenceDuration - 1.1 // don't play the recover animation
     result.success = true
 }
 
@@ -108,17 +130,21 @@ void function PlayerRemoveBatteryPackFromPort( entity player, entity batteryPort
 
 void function ApplyBatteryToBatteryPort( entity player, entity batteryPort )
 {
+    if ( player.GetPlayerNetInt( "batteryCount" ) <= 0 )
+        return
     entity battery = Rodeo_TakeBatteryAwayFromPilot( player )
-    if( !IsValid( battery ) )
+    if ( !IsValid( battery ) )
         return
 
-    entity nearestTurret = GetNearestMegaTurret( batteryPort ) // consider this is the nearst
-    if( !IsValid( nearestTurret ) )
+    entity nearestTurret = GetNearestMegaTurret( batteryPort ) // consider this is the port's related turret
+    if ( !IsValid( nearestTurret ) )
         return
 
     // player can apply battery
     battery.SetParent( batteryPort, "REF" )
     battery.SetOrigin( < 0,0,5 > ) // offset
+    batteryPort.s.batteryPack = battery
+    SetTeam( nearestTurret, player.GetTeam() )
     nearestTurret.SetHealth( nearestTurret.GetMaxHealth() )
     nearestTurret.SetShieldHealth( nearestTurret.GetShieldHealthMax() )
     EmitSoundOnEntityOnlyToPlayer( player, player, "UI_TitanBattery_Pilot_Give_TitanBattery" )
@@ -143,7 +169,7 @@ void function DelayedClearSyncedEntityForBatteryApply( entity player, entity bat
 {
     WaitFrame()
 	
-    if( IsValid( player ) && IsValid( batteryPort ) )
+    if ( IsValid( player ) && IsValid( batteryPort ) )
         player.SetSyncedEntity( null )
 }
 
