@@ -32,6 +32,7 @@ void function ApplyBatteryToBatteryPort( entity player, entity batteryPort )
     player.EndSignal( "OnDestroy" )
     print( "try to playAnim for batteryPort" )
     waitthread PlayAnim( batteryPort, "bp_mp_battery_port_insert" )
+
     print( "animation done" )
     entity battery = Rodeo_TakeBatteryAwayFromPilot( player )
     if( IsValid( battery ) )
@@ -39,6 +40,67 @@ void function ApplyBatteryToBatteryPort( entity player, entity batteryPort )
         battery.SetParent( batteryPort, "REF" )
         battery.SetOrigin( < 0,0,5 > ) // offset
     }
+}
+
+void function PlayerApplyBatteryPackToPort( entity player, entity batteryPort )
+{
+	entity battery = GetBatteryOnBack( player )
+	battery.Hide() //Hide it because the animation has a battery model already
+
+	entity tempBattery3p
+	tempBattery3p = CreatePropDynamic( RODEO_BATTERY_MODEL_FOR_RODEO_ANIMS )
+	tempBattery3p.SetParent( player, "R_HAND", false, 0.0 )
+	tempBattery3p.RemoveFromSpatialPartition()
+
+	entity tempBattery1p
+	tempBattery1p = CreatePropDynamic( RODEO_BATTERY_MODEL_FOR_RODEO_ANIMS )
+	tempBattery1p.SetParent( player.GetFirstPersonProxy(), "R_HAND", false, 0.0 )
+	tempBattery1p.RemoveFromSpatialPartition()
+
+    tempBattery1p.SetSkin( 2 )
+    tempBattery3p.SetSkin( 2 )
+
+	player.p.rodeoAnimTempProps.append( tempBattery3p )
+	player.p.rodeoAnimTempProps.append( tempBattery1p )
+
+	OnThreadEnd(
+	function() : ( battery, titanSoul, titanType, player, dataStruct )
+		{
+			if ( IsValid( battery ) )
+				battery.Show()
+
+			if ( !IsValid( player ) )
+				return
+
+			ClearApplyBatteryAnimTempProps( player )
+
+			StopSoundOnEntity( player, "rodeo_medium_battery_return_ext" )
+		}
+	)
+
+	FirstPersonSequenceStruct sequence
+	sequence.attachment = "REF" // only ref the batteryPort has
+
+    // these are baically atlas's battery animations
+	sequence.thirdPersonAnim 		= "pt_rodeo_back_r_apply_battery"
+	sequence.firstPersonAnim 		= "ptpov_rodeo_back_r_apply_battery"
+    
+	EmitSoundOnEntity( player, "rodeo_medium_battery_return_ext" ) // emit sound on player
+
+	player.SetSyncedEntity( batteryPort )
+
+	waitthread FirstPersonSequence( sequence, player, batteryPort )
+}
+
+void function ClearApplyBatteryAnimTempProps( entity player )
+{
+	foreach( tempProp in player.p.rodeoAnimTempProps )
+	{
+		if ( IsValid( tempProp ) )
+			tempProp.Destroy()
+		}
+
+	player.p.rodeoAnimTempProps.clear()
 }
 
 BatteryPortStruct function GetCurrentStructFromBatteryPort( entity batteryPort )
