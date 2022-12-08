@@ -3,6 +3,27 @@ global function GamemodeFW_Init
 global function RateSpawnpoints_FW
 global function SetupFWTerritoryTrigger
 
+// basically needs to match "waves count - bosswaves count"
+const int FW_MAX_LEVELS = 3
+
+// to confirm it's a npc from camps..
+const string FW_NPC_SCRIPTNAME = "fw_npcsFromCamp"
+const int FW_AI_TEAM = TEAM_BOTH
+const float WAVE_STATE_TRANSITION_TIME = 5.0
+
+// from sh_gamemode_fw, if half of these npcs cleared in one camp, it gets escalate
+const int FW_GRUNT_COUNT = 36//32
+const int FW_SPECTRE_COUNT = 24
+const int FW_REAPER_COUNT = 2
+
+// max deployment each camp
+const int FW_GRUNT_MAX_DEPLOYED = 8 
+const int FW_SPECTRE_MAX_DEPLOYED = 8 
+const int FW_REAPER_MAX_DEPLOYED = 1
+
+// if other camps been cleaned many times, we levelDown
+const int FW_IGNORE_NEEDED = 2
+
 global HarvesterStruct& fw_harvesterMlt
 global HarvesterStruct& fw_harvesterImc
 
@@ -16,128 +37,63 @@ global struct TurretSite
     string turretflagid
 }
 
-global struct CampSiteStruct
+// this is not using respawn's remaining codes!
+struct CampSiteStruct
 {
     entity camp
     entity info
+    array<entity> validDropPodSpawns
+    array<entity> validTitanSpawns
     string campId // "A", "B", "C"
+    int ignoredSinceLastClean
+}
+
+struct CampSpawnStruct
+{
+    string spawnContent // what npcs to spawn
+    int maxSpawnCount // max spawn count on this camp
+    int countPerSpawn // how many npcs to deploy per spawn, for droppods most be 4
+    int killsToEscalate // how many kills needed to escalate
 }
 
 struct
 {
     array<HarvesterStruct> harvesters
+
     array<entity> camps
+
     array<entity> fwTerritories
+
     array<TurretSite> turretsites
-    array<CampSiteStruct> campsites
+
+    array<CampSiteStruct> fwCampSites
+
     array<entity> etitaninmlt
     array<entity> etitaninimc
+
     entity harvesterMlt_info
     entity harvesterImc_info
-    bool havesterWasDamaged
-	bool harvesterShieldDown
-	float harvesterDamageTaken
+
+    table<int, CampSpawnStruct> fwNpcLevel // basically use to powerup certian camp, sync with alertLevel
+    table< string, table< string, int > > trackedCampNPCSpawns
 }file
 
 void function GamemodeFW_Init()
 {
     file.harvesters.append(fw_harvesterMlt)
     file.harvesters.append(fw_harvesterImc)
-    if ( GameRules_GetGameMode() == "fw" )
-    {
-       AddCallback_EntitiesDidLoad( LoadEntities )
-       AddCallback_GameStateEnter( eGameState.Prematch, FW_createHarvester )
-       AddCallback_GameStateEnter( eGameState.Playing, OnFwGamePlaying )
-       AddDamageCallback( "npc_turret_mega" , TurretFlagDamageCallback )
 
-       // need to be in LoadEntities(), before harvester creation
-       //AddSpawnCallbackEditorClass( "trigger_multiple", "trigger_fw_territory", SetupFWTerritoryTrigger )
-       // noneed to use it rn
-       //AddSpawnCallbackEditorClass( "info_target", "info_fw_camp", InitCampTracker )
-    }
+    AddCallback_EntitiesDidLoad( LoadEntities )
+    AddCallback_GameStateEnter( eGameState.Prematch, OnFWGamePrematch )
+    AddCallback_GameStateEnter( eGameState.Playing, OnFWGamePlaying )
+
+    ScoreEvent_SetupEarnMeterValuesForMixedModes()
+
+    // need to be in LoadEntities(), before harvester creation
+    //AddSpawnCallbackEditorClass( "trigger_multiple", "trigger_fw_territory", SetupFWTerritoryTrigger )
+    // noneed to use it rn
+    //AddSpawnCallbackEditorClass( "info_target", "info_fw_camp", InitCampTracker )
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-void function TurretFlagDamageCallback( entity turret , var damageinfo )
-{
-    if ( !IsValid( turret ) )
-        return
-    bool isorigin = expect bool( turret.s.IsOrigin )
-    if ( isorigin )
-    {
-        thread TurretFlagOnDamage_threaded( turret )
-        return
-    }
-    thread NeturalTurretFlagOnDamage_threaded( turret )
-}
-void function TurretFlagOnDamage_threaded( entity turret )
-{
-    string flag = expect string( turret.s.turretflagid )
-    if ( turret.GetTeam() == TEAM_IMC && GetGlobalNetInt( "turretStateFlags" + flag ) != 26 )
-    {
-        SetGlobalNetInt( "turretStateFlags" + flag, 26 )
-        wait 2
-        SetGlobalNetInt( "turretStateFlags" + flag, 10 )
-        return
-    }
-    if( turret.GetTeam() == TEAM_MILITIA && GetGlobalNetInt( "turretStateFlags" + flag ) != 28 )
-    {
-        SetGlobalNetInt( "turretStateFlags" + flag, 28 )
-        wait 2
-        SetGlobalNetInt( "turretStateFlags" + flag, 13 )
-        return
-    }
-}
-void function NeturalTurretFlagOnDamage_threaded( entity turret )
-{
-    string flag = expect string( turret.s.turretflagid )
-    if ( turret.GetTeam() == TEAM_IMC && GetGlobalNetInt( "turretStateFlags" + flag ) != 18 )
-    {
-        SetGlobalNetInt( "turretStateFlags" + flag, 18 )
-        wait 2
-        SetGlobalNetInt( "turretStateFlags" + flag, 2 )
-        return
-    }
-    if( turret.GetTeam() == TEAM_MILITIA && GetGlobalNetInt( "turretStateFlags" + flag ) != 21 )
-    {
-        SetGlobalNetInt( "turretStateFlags" + flag, 21 )
-        wait 2
-        SetGlobalNetInt( "turretStateFlags" + flag, 4 )
-        return
-    }
-    if ( GetGlobalNetInt( "turretStateFlags" + flag ) != 16 )
-    {
-        SetGlobalNetInt( "turretStateFlags" + flag, 16 )
-        wait 2
-        SetGlobalNetInt( "turretStateFlags" + flag, 1 )
-        return
-    }
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 void function RateSpawnpoints_FW( int checkClass, array<entity> spawnpoints, int team, entity player )
 {
@@ -178,34 +134,236 @@ void function RateSpawnpoints_FW( int checkClass, array<entity> spawnpoints, int
 	}
 }
 
-void function OnFwGamePlaying()
+void function OnFWGamePrematch()
+{
+    FW_createHarvester()
+    InitCampSpawner()
+}
+
+void function OnFWGamePlaying()
 {
     startFWHarvester()
     FWAreaThreatLevelThink()
+    StartFWCampThink()
+}
+
+void function InitCampSpawner() // can edit this to make more spawns, alertLevel supports max to lv3( 0,1,2 )
+{
+    // lv1 spawns: grunts
+    CampSpawnStruct campSpawnLv1
+    campSpawnLv1.spawnContent = "npc_soldier"
+    campSpawnLv1.maxSpawnCount = FW_GRUNT_MAX_DEPLOYED
+    campSpawnLv1.countPerSpawn = 4 // how many npcs to deploy per spawn, for droppods most be 4
+    campSpawnLv1.killsToEscalate = FW_GRUNT_COUNT / 2
+
+    file.fwNpcLevel[0] <- campSpawnLv1
+
+    // lv2 spawns: spectres
+    CampSpawnStruct campSpawnLv2
+    campSpawnLv2.spawnContent = "npc_spectre"
+    campSpawnLv2.maxSpawnCount = FW_SPECTRE_MAX_DEPLOYED
+    campSpawnLv2.countPerSpawn = 4 // how many npcs to deploy per spawn, for droppods most be 4
+    campSpawnLv2.killsToEscalate = FW_SPECTRE_COUNT / 2
+
+    file.fwNpcLevel[1] <- campSpawnLv2
+
+    // lv3 spawns: reapers
+    CampSpawnStruct campSpawnLv3
+    campSpawnLv3.spawnContent = "npc_super_spectre"
+    campSpawnLv3.maxSpawnCount = FW_REAPER_MAX_DEPLOYED
+    campSpawnLv3.countPerSpawn = 1 // how many npcs to deploy per spawn
+    campSpawnLv3.killsToEscalate = FW_REAPER_COUNT / 2 // only 1 kill needed to spawn the boss?
+
+    file.fwNpcLevel[2] <- campSpawnLv3
 }
 
 void function InitCampTracker( entity camp )
 {
     print("InitCampTracker")
     CampSiteStruct campsite
-    file.campsites.append( campsite )
+    file.fwCampSites.append( campsite )
+
     entity prop = CreateEntity( "prop_script" )
-    prop.SetOrigin( camp.GetOrigin() )
+    prop.SetOrigin( camp.GetOrigin() ) // tracker needs a owner to display
     prop.SetModel( $"models/dev/empty_model.mdl" )
     campsite.camp = prop
     DispatchSpawn( prop )
+
+    float radius = float( camp.kv.radius ) // radius to show up icon and spawn ais
+
     entity tracker = GetAvailableCampLocationTracker()
     tracker.SetOwner( prop )
     campsite.info = tracker
-    SetLocationTrackerRadius( tracker, float( camp.kv.radius ) )
-    thread FWAiCampThink( camp )
+    SetLocationTrackerRadius( tracker, radius )
     DispatchSpawn( tracker )
 
+    // get droppod spawns
+    foreach ( entity spawnpoint in SpawnPoints_GetDropPod() )
+        if ( Distance( camp.GetOrigin(), spawnpoint.GetOrigin() ) < radius )
+            campsite.validDropPodSpawns.append( spawnpoint )
+    
+    // get titan spawns
+    foreach ( entity spawnpoint in SpawnPoints_GetTitan() )
+        if ( Distance( camp.GetOrigin(), spawnpoint.GetOrigin() ) < radius )
+            campsite.validTitanSpawns.append( spawnpoint )
 }
 
-void function FWAiCampThink( entity camp )
+void function StartFWCampThink()
 {
+    foreach( CampSiteStruct camp in file.fwCampSites )
+    {
+        //print( "has " + string( file.fwCampSites.len() ) + " camps in total" )
+        //print( "campId is " + camp.campId )
+        thread FWAiCampThink( camp )
+    }
+}
 
+// this is not using respawn's remaining code!
+void function FWAiCampThink( CampSiteStruct campsite )
+{
+    string campId = campsite.campId
+    print( "campId is " + campId )
+    string alertVarName = "fwCampAlert" + campId
+    string stressVarName = "fwCampStress" + campId
+
+    while( GetGameState() == eGameState.Playing )
+    {
+        wait WAVE_STATE_TRANSITION_TIME
+
+        int alertLevel = GetGlobalNetInt( alertVarName )
+        if( campsite.ignoredSinceLastClean >= FW_IGNORE_NEEDED ) // has been ignored many times
+        {
+            // reset level
+            alertLevel = 0 
+            SetGlobalNetInt( alertVarName, 0 )
+            campsite.ignoredSinceLastClean = 0
+        }
+        if( alertLevel + 1 >= FW_MAX_LEVELS ) // reached max level!
+            alertLevel = FW_MAX_LEVELS - 1
+
+        CampSpawnStruct curSpawnStruct = file.fwNpcLevel[alertLevel]
+        string npcToSpawn = curSpawnStruct.spawnContent
+        int maxSpawnCount = curSpawnStruct.maxSpawnCount
+        int countPerSpawn = curSpawnStruct.countPerSpawn
+        int killsToEscalate = curSpawnStruct.killsToEscalate
+
+        // for this time's loop
+        file.trackedCampNPCSpawns[campId] = {}
+        int killsNeeded = killsToEscalate
+        int lastNpcLeft
+        while( true ) 
+        {
+            WaitFrame()
+
+            if( !( npcToSpawn in file.trackedCampNPCSpawns[campId] ) ) // init it
+                file.trackedCampNPCSpawns[campId][npcToSpawn] <- 0
+
+            int npcsLeft = file.trackedCampNPCSpawns[campId][npcToSpawn]
+            killsNeeded -= lastNpcLeft - npcsLeft
+
+            if( killsNeeded <= 0 ) // check if needs more kills
+            {
+                SetGlobalNetInt( alertVarName, alertLevel + 1 ) // level up
+                SetGlobalNetFloat( stressVarName, 1.0 ) // refill
+                AddIgnoredCountToOtherCamps( campsite )
+                break
+            }
+
+            // update stress bar
+            float campStressLeft = float( killsNeeded ) / float( killsToEscalate )
+            SetGlobalNetFloat( stressVarName, campStressLeft )
+            //print( "campStressLeft: " + string( campStressLeft ) )
+
+            if( maxSpawnCount - npcsLeft >= countPerSpawn ) // keep spawning
+            {
+                // spawn functions, for fw we only spawn one kind of enemy each time
+                // light units
+                if( npcToSpawn == "npc_soldier"
+                    || npcToSpawn == "npc_spectre"
+                    || npcToSpawn == "npc_stalker" )
+                    thread FW_SpawnDroppodSquad( campsite, npcToSpawn )
+
+                // reapers
+                if( npcToSpawn == "npc_super_spectre" )
+                    thread FW_SpawnReaper( campsite )
+
+                file.trackedCampNPCSpawns[campId][npcToSpawn] += countPerSpawn
+
+                // titans?
+                //else if( npcToSpawn == "npc_titan" )
+                //{
+                //    file.trackedCampNPCSpawns[campId][npcToSpawn] += 4
+                //}
+            }
+
+            lastNpcLeft = file.trackedCampNPCSpawns[campId][npcToSpawn]
+        }
+    }
+}
+
+void function AddIgnoredCountToOtherCamps( CampSiteStruct senderCamp )
+{
+    senderCamp.ignoredSinceLastClean = 0 // under attack, not ignored at all
+    foreach( CampSiteStruct camp in file.fwCampSites )
+    {
+        if( camp.campId != senderCamp.campId ) // other camps
+            camp.ignoredSinceLastClean += 1
+    }
+}
+
+// functions from at
+void function FW_SpawnDroppodSquad( CampSiteStruct campsite, string aiType )
+{
+	entity spawnpoint
+	if ( campsite.validDropPodSpawns.len() == 0 )
+		spawnpoint = campsite.info // no spawnPoints valid, use camp itself to spawn
+	else
+		spawnpoint = campsite.validDropPodSpawns.getrandom()
+	
+	// add variation to spawns
+	wait RandomFloat( 1.0 )
+	
+	AiGameModes_SpawnDropPod( spawnpoint.GetOrigin(), spawnpoint.GetAngles(), FW_AI_TEAM, aiType, void function( array<entity> guys ) : ( campsite, aiType ) 
+	{
+		FW_HandleSquadSpawn( guys, campsite.campId, aiType )
+	})
+}
+
+void function FW_HandleSquadSpawn( array<entity> guys, string campId, string aiType )
+{
+	foreach ( entity guy in guys )
+	{
+		guy.EnableNPCFlag( NPC_ALLOW_PATROL | NPC_ALLOW_INVESTIGATE | NPC_ALLOW_HAND_SIGNALS | NPC_ALLOW_FLEE )
+		guy.SetScriptName( FW_NPC_SCRIPTNAME ) // well no need
+
+		// untrack them on death
+		thread FW_WaitToUntrackNPC( guy, campId, aiType )
+	}
+}
+
+void function FW_SpawnReaper( CampSiteStruct campsite )
+{
+	entity spawnpoint
+	if ( campsite.validDropPodSpawns.len() == 0 )
+		spawnpoint = campsite.info // no spawnPoints valid, use camp itself to spawn
+	else
+		spawnpoint = campsite.validDropPodSpawns.getrandom()
+
+	// add variation to spawns
+	wait RandomFloat( 1.0 )
+	
+	AiGameModes_SpawnReaper( spawnpoint.GetOrigin(), spawnpoint.GetAngles(), FW_AI_TEAM, "npc_super_spectre_aitdm",void function( entity reaper ) : ( campsite ) 
+	{
+        reaper.SetScriptName( FW_NPC_SCRIPTNAME )
+		thread FW_WaitToUntrackNPC( reaper, campsite.campId, "npc_super_spectre" )
+	})
+}
+
+void function FW_WaitToUntrackNPC( entity guy, string campId, string aiType )
+{
+	guy.WaitSignal( "OnDeath", "OnDestroy" )
+    if( aiType in file.trackedCampNPCSpawns[ campId ] ) // maybe escalated?
+	    file.trackedCampNPCSpawns[ campId ][ aiType ]--
 }
 
 void function SetupFWTerritoryTrigger( entity trigger )
@@ -384,11 +542,6 @@ void function FWAreaThreatLevelThink_Threaded()
 
 void function startFWHarvester()
 {
-    /*foreach ( HarvesterStruct fd_harvester in harvesters )
-    {
-	    thread HarvesterThink(fd_harvester)
-	    thread HarvesterAlarm(fd_harvester)
-    }*/
     thread HarvesterThink(fw_harvesterMlt)
 	thread HarvesterAlarm(fw_harvesterMlt)
     thread HarvesterThink(fw_harvesterImc)
@@ -641,8 +794,67 @@ void function OnMegaTurretDamaged( entity turret, var damageInfo )
             return
         }
     }
+
+    TurretFlagDamageCallback( turret, damageInfo ) // this will affect turret's icons
 }
 
+void function TurretFlagDamageCallback( entity turret, var damageInfo )
+{
+    if ( !IsValid( turret ) )
+        return
+    bool isorigin = expect bool( turret.s.IsOrigin )
+    if ( isorigin )
+    {
+        thread TurretFlagOnDamage_threaded( turret )
+        return
+    }
+    thread NeturalTurretFlagOnDamage_threaded( turret )
+}
+
+void function TurretFlagOnDamage_threaded( entity turret )
+{
+    string flag = expect string( turret.s.turretflagid )
+    if ( turret.GetTeam() == TEAM_IMC && GetGlobalNetInt( "turretStateFlags" + flag ) != 26 )
+    {
+        SetGlobalNetInt( "turretStateFlags" + flag, 26 )
+        wait 2
+        SetGlobalNetInt( "turretStateFlags" + flag, 10 )
+        return
+    }
+    if( turret.GetTeam() == TEAM_MILITIA && GetGlobalNetInt( "turretStateFlags" + flag ) != 28 )
+    {
+        SetGlobalNetInt( "turretStateFlags" + flag, 28 )
+        wait 2
+        SetGlobalNetInt( "turretStateFlags" + flag, 13 )
+        return
+    }
+}
+
+void function NeturalTurretFlagOnDamage_threaded( entity turret )
+{
+    string flag = expect string( turret.s.turretflagid )
+    if ( turret.GetTeam() == TEAM_IMC && GetGlobalNetInt( "turretStateFlags" + flag ) != 18 )
+    {
+        SetGlobalNetInt( "turretStateFlags" + flag, 18 )
+        wait 2
+        SetGlobalNetInt( "turretStateFlags" + flag, 2 )
+        return
+    }
+    if( turret.GetTeam() == TEAM_MILITIA && GetGlobalNetInt( "turretStateFlags" + flag ) != 21 )
+    {
+        SetGlobalNetInt( "turretStateFlags" + flag, 21 )
+        wait 2
+        SetGlobalNetInt( "turretStateFlags" + flag, 4 )
+        return
+    }
+    if ( GetGlobalNetInt( "turretStateFlags" + flag ) != 16 )
+    {
+        SetGlobalNetInt( "turretStateFlags" + flag, 16 )
+        wait 2
+        SetGlobalNetInt( "turretStateFlags" + flag, 1 )
+        return
+    }
+}
 
 void function initNetVars()
 {
@@ -671,25 +883,34 @@ void function initNetVars()
     }
 
     // camps don't have a id, set them manually
-    foreach( int index, CampSiteStruct camp in file.campsites )
+    foreach( int index, CampSiteStruct camp in file.fwCampSites )
     {
         if ( index == 0 )
         {
             camp.campId = "A"
             SetGlobalNetInt( "fwCampAlertA", 0 )
-            SetGlobalNetInt( "fwCampStressA", 0 )
+            SetGlobalNetFloat( "fwCampStressA", 1.0 )
+            SetLocationTrackerID( camp.info, 0 )
+            file.trackedCampNPCSpawns["A"] <- {}
+            continue
         }
         if ( index == 1 )
         {
             camp.campId = "B"
             SetGlobalNetInt( "fwCampAlertB", 0 )
-            SetGlobalNetInt( "fwCampStressB", 0 )
+            SetGlobalNetFloat( "fwCampStressB", 1.0 )
+            SetLocationTrackerID( camp.info, 1 )
+            file.trackedCampNPCSpawns["B"] <- {}
+            continue
         }
-        if ( index == 1 )
+        if ( index == 2 )
         {
             camp.campId = "C"
             SetGlobalNetInt( "fwCampAlertC", 0 )
-            SetGlobalNetInt( "fwCampStressC", 0 )
+            SetGlobalNetFloat( "fwCampStressC", 1.0 )
+            SetLocationTrackerID( camp.info, 2 )
+            file.trackedCampNPCSpawns["C"] <- {}
+            continue
         }
     }
 
@@ -769,12 +990,12 @@ void function HarvesterThink( HarvesterStruct fd_harvester )
 			if (!isRegening)
 			{
 				EmitSoundOnEntity( harvester, "coop_generator_shieldrecharge_resume" )
-				file.harvesterShieldDown = false
+				fd_harvester.harvesterShieldDown = false
 				//if (GetGlobalNetBool( "FD_waveActive" ) )
 					//PlayFactionDialogueToTeam( "fd_baseShieldRecharging", TEAM_MILITIA )
 				//else
 					//PlayFactionDialogueToTeam( "fd_baseShieldRechargingShort", TEAM_MILITIA )
-						isRegening = true
+				isRegening = true
 			}
 
 			float newShieldHealth = ( harvester.GetShieldHealthMax() / GENERATOR_SHIELD_REGEN_TIME * deltaTime ) + harvester.GetShieldHealth()
