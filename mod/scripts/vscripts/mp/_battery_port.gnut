@@ -169,12 +169,15 @@ void function ApplyBatteryToBatteryPort( entity player, entity batteryPort )
     battery.SetOrigin( < 0,0,5 > ) // offset
     batteryPort.s.batteryPack = battery
     // change turret settings
+    
+    entity minimapTurret = expect entity( nearestTurret.s.minimapstate )
+    string turretId = expect string( nearestTurret.s.turretflagid )
     SetTeam( nearestTurret, player.GetTeam() )
-    SetTeam( expect entity(nearestTurret.s.minimapstate) , player.GetTeam() )
+    SetTeam( minimapTurret, player.GetTeam() )
     if ( player.GetTeam() == TEAM_IMC )
-        SetGlobalNetInt( expect string(nearestTurret.s.turretflagid) , 2 )
+        SetGlobalNetInt( "turretStateFlags" + turretId, 2 ) // 2 means TEAM_IMC
     if ( player.GetTeam() == TEAM_MILITIA )
-        SetGlobalNetInt( expect string(nearestTurret.s.turretflagid) , 4 )
+        SetGlobalNetInt( "turretStateFlags" + turretId, 4 ) // 2 means TEAM_MILITIA
 
     nearestTurret.SetHealth( nearestTurret.GetMaxHealth() )
     nearestTurret.SetShieldHealth( nearestTurret.GetShieldHealthMax() )
