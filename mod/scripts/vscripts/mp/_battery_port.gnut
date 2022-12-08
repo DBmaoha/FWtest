@@ -1,0 +1,56 @@
+
+global function InitTurretBatteryPort
+global function ApplyBatteryToBatteryPort
+
+global struct BatteryPortStruct
+{
+    entity batteryPort
+    entity turret
+    bool hasBattery
+    float lastBatteryAppliedTime
+}
+
+struct
+{
+    array<BatteryPortStruct> allBatteryPorts
+} file
+
+void function InitTurretBatteryPort( entity batteryPort, entity turret )
+{
+    BatteryPortStruct initStruct
+    initStruct.batteryPort = batteryPort
+    initStruct.turret = turret
+    initStruct.hasBattery = false
+    initStruct.lastBatteryAppliedTime = -1.0 // not used yet
+}
+
+void function ApplyBatteryToBatteryPort( entity player, entity batteryPort )
+{
+    if( !PlayerHasBattery( player ) )
+        return
+    player.EndSignal( "OnDeath" )
+    player.EndSignal( "OnDestroy" )
+    print( "try to playAnim for batteryPort" )
+    waitthread PlayAnim( batteryPort, "bp_mp_battery_port_insert" )
+    print( "animation done" )
+    entity battery = Rodeo_TakeBatteryAwayFromPilot( player )
+    if( IsValid( battery ) )
+    {
+        battery.SetParent( batteryPort, "REF" )
+        battery.SetOrigin( < 0,0,5 > ) // offset
+    }
+}
+
+BatteryPortStruct function GetCurrentStructFromBatteryPort( entity batteryPort )
+{
+    BatteryPortStruct tempStruct
+    foreach( BatteryPortStruct portStruct in file.allBatteryPorts )
+    {
+        if( portStruct.batteryPort == batteryPort )
+        {
+            tempStruct = portStruct
+            break
+        }
+    }
+    return tempStruct
+}
