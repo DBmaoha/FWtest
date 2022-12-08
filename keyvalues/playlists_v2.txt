@@ -16,6 +16,7 @@ playlists
 				max_teams 2
 				classic_mp 1
 				scorelimit 100 // score is a percentage so ofc need max to be 100%
+				timelimit 15
 			}
 		}
 	}
@@ -37,6 +38,7 @@ playlists
 				max_teams 2
 				classic_mp 1
 				scorelimit 100
+				timelimit 15
 				
 				gamemode_score_hint #GAMEMODE_SCORE_HINT_TDM
 			}	
