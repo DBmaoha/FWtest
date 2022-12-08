@@ -212,7 +212,7 @@ function FW_OnUseBatteryPort( entBeingUse, user )
     expect entity( user )
 
     print( "try to use batteryPort" )
-    thread ApplyBatteryToBatteryPort( user, entBeingUse )
+    thread TryUseBatteryPort( user, entBeingUse )
 }
 
 void function FW_createHarvester()

@@ -1,6 +1,6 @@
 
 global function InitTurretBatteryPort
-global function ApplyBatteryToBatteryPort
+global function TryUseBatteryPort
 
 global struct BatteryPortStruct
 {
@@ -15,8 +15,10 @@ struct
     array<BatteryPortStruct> allBatteryPorts
 } file
 
-void function InitTurretBatteryPort( entity batteryPort, entity turret )
+void function InitTurretBatteryPort( entity batteryPort )
 {
+    array<entity> allTurrets = GetNPCArrayByClass( "npc_turret_mega" )
+    entity turret = GetClosest( allTurrets, batteryPort.GetOrigin(), 9999 ) // get nearest turret
     BatteryPortStruct initStruct
     initStruct.batteryPort = batteryPort
     initStruct.turret = turret
@@ -24,26 +26,21 @@ void function InitTurretBatteryPort( entity batteryPort, entity turret )
     initStruct.lastBatteryAppliedTime = -1.0 // not used yet
 }
 
-void function ApplyBatteryToBatteryPort( entity player, entity batteryPort )
+void function TryUseBatteryPort( entity player, entity batteryPort )
 {
     if( !PlayerHasBattery( player ) )
         return
-    player.EndSignal( "OnDeath" )
-    player.EndSignal( "OnDestroy" )
-    print( "try to playAnim for batteryPort" )
-    waitthread PlayAnim( batteryPort, "bp_mp_battery_port_insert" )
 
+    print( "try to playAnim for batteryPort" )
+    waitthread PlayerApplesBatteryPackToPort( player, batteryPort )
     print( "animation done" )
-    entity battery = Rodeo_TakeBatteryAwayFromPilot( player )
-    if( IsValid( battery ) )
-    {
-        battery.SetParent( batteryPort, "REF" )
-        battery.SetOrigin( < 0,0,5 > ) // offset
-    }
 }
 
-void function PlayerApplyBatteryPackToPort( entity player, entity batteryPort )
+void function PlayerApplesBatteryPackToPort( entity player, entity batteryPort )
 {
+    table result = {}
+    result.success <- false
+
 	entity battery = GetBatteryOnBack( player )
 	battery.Hide() //Hide it because the animation has a battery model already
 
@@ -64,7 +61,7 @@ void function PlayerApplyBatteryPackToPort( entity player, entity batteryPort )
 	player.p.rodeoAnimTempProps.append( tempBattery1p )
 
 	OnThreadEnd(
-	function() : ( battery, titanSoul, titanType, player, dataStruct )
+	function() : ( battery, batteryPort, player, result )
 		{
 			if ( IsValid( battery ) )
 				battery.Show()
@@ -75,6 +72,11 @@ void function PlayerApplyBatteryPackToPort( entity player, entity batteryPort )
 			ClearApplyBatteryAnimTempProps( player )
 
 			StopSoundOnEntity( player, "rodeo_medium_battery_return_ext" )
+
+            if( result.success ) // successfully applied battery
+            {
+                ApplyBatteryToBatteryPort( player, batteryPort )
+            }
 		}
 	)
 
@@ -90,6 +92,41 @@ void function PlayerApplyBatteryPackToPort( entity player, entity batteryPort )
 	player.SetSyncedEntity( batteryPort )
 
 	waitthread FirstPersonSequence( sequence, player, batteryPort )
+    data.success = true
+}
+
+void function PlayerRemoveBatteryPackFromPort( entity player, entity batteryPort )
+{
+    
+}
+
+void function PlayerApplyBatteryPackToPort( entity player, entity batteryPort )
+{
+    entity battery = Rodeo_TakeBatteryAwayFromPilot( player )
+
+    if( IsValid( battery ) )
+    {
+        battery.SetParent( batteryPort, "REF" )
+        battery.SetOrigin( < 0,0,5 > ) // offset
+    }
+
+    entity nearestTurret = GetNearestMegaTurret( batteryPort ) // consider this is the nearst
+    nearestTurret.SetHealth( nearestTurret.GetMaxHealth() )
+    nearestTurret.SetShieldHealth( nearestTurret.GetShieldHealthMax() )
+}
+
+entity function GetNearestMegaTurret( entity ent )
+{
+    array<entity> allTurrets = GetNPCArrayByClass( "npc_turret_mega" )
+    entity turret = GetClosest( allTurrets, batteryPort.GetOrigin(), 9999 ) // get nearest turret
+    return turret
+}
+
+void function DelayedClearSyncedEntityForBatteryApply( entity player )
+{
+    WaitFrame()
+	
+    if( IsValid( player ) )
 }
 
 void function ClearApplyBatteryAnimTempProps( entity player )
