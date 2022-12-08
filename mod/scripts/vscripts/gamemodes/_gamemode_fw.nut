@@ -278,6 +278,7 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
             {
                 Remote_CallFunction_NonReplay( attacker , "ServerCallback_FW_NotifyTitanRequired" )
                 DamageInfo_SetDamage( damageInfo , 0 )
+                return
             }
             if( !harvesterstruct.harvesterShieldDown )
             {
