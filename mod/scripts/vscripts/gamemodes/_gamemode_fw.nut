@@ -285,7 +285,7 @@ void function LoadEntities()
                     SetTeam( site , info_target.GetTeam() )
                     site.kv.solid = SOLID_VPHYSICS
                     DispatchSpawn( site )
-                    turretsite.minimapstate = site
+                    turret.s.minimapstate <- site
                     turretsite.site = info_target
                     break
 			}
@@ -494,63 +494,63 @@ void function initNetVars()
         {
             SetGlobalNetEnt( "turretSite1" , turret.turret )
             SetGlobalNetInt("turretStateFlags1" , 1  )
-            turret.turretflagid = "turretStateFlags1"
+            turret.turret.s.turretflagid <- "turretStateFlags1"
             thread TurretSiteWatcher(turret)
         }
         if ( turret.site.kv.turretId == "1" )
         {
             SetGlobalNetEnt( "turretSite2" , turret.turret )
             SetGlobalNetInt("turretStateFlags2" , 1 )
-            turret.turretflagid = "turretStateFlags2"
+            turret.turret.s.turretflagid <- "turretStateFlags2"
             thread TurretSiteWatcher(turret)
         }
         if ( turret.site.kv.turretId == "2" )
         {
             SetGlobalNetEnt( "turretSite3" , turret.turret )
             SetGlobalNetInt("turretStateFlags3" , 1)
-            turret.turretflagid = "turretStateFlags3"
+            turret.turret.s.turretflagid <- "turretStateFlags3"
             thread TurretSiteWatcher(turret)
         }
         if ( turret.site.kv.turretId == "3" )
         {
             SetGlobalNetEnt( "turretSite4" , turret.turret )
             SetGlobalNetInt("turretStateFlags4" , 2 )
-            turret.turretflagid = "turretStateFlags4"
+            turret.turret.s.turretflagid <- "turretStateFlags4"
             thread TurretSiteWatcher(turret)
         }
         if ( turret.site.kv.turretId == "4" )
         {
             SetGlobalNetEnt( "turretSite5" , turret.turret )
             SetGlobalNetInt("turretStateFlags5" , 2 )
-            turret.turretflagid = "turretStateFlags5"
+            turret.turret.s.turretflagid <- "turretStateFlags5"
             thread TurretSiteWatcher(turret)
         }
         if ( turret.site.kv.turretId == "5" )
         {
             SetGlobalNetEnt( "turretSite6" , turret.turret )
             SetGlobalNetInt("turretStateFlags6" , 2 )
-            turret.turretflagid = "turretStateFlags6"
+            turret.turret.s.turretflagid <- "turretStateFlags6"
             thread TurretSiteWatcher(turret)
         }
         if ( turret.site.kv.turretId == "6" )
         {
             SetGlobalNetEnt( "turretSite7" , turret.turret )
             SetGlobalNetInt("turretStateFlags7" , 4 )
-            turret.turretflagid = "turretStateFlags7"
+            turret.turret.s.turretflagid <- "turretStateFlags7"
             thread TurretSiteWatcher(turret)
         }
         if ( turret.site.kv.turretId == "7" )
         {
             SetGlobalNetEnt( "turretSite8" , turret.turret )
             SetGlobalNetInt("turretStateFlags8" , 4)
-            turret.turretflagid = "turretStateFlags8"
+            turret.turret.s.turretflagid <- "turretStateFlags8"
             thread TurretSiteWatcher(turret)
         }
         if ( turret.site.kv.turretId == "8" )
         {
             SetGlobalNetEnt( "turretSite9" , turret.turret )
             SetGlobalNetInt("turretStateFlags9" , 4 )
-            turret.turretflagid = "turretStateFlags9"
+            turret.turret.s.turretflagid <- "turretStateFlags9"
             thread TurretSiteWatcher(turret)
         }
     }
@@ -559,18 +559,21 @@ void function initNetVars()
 
 void function TurretSiteWatcher( TurretSite turret )
 {
+    //expect entity(turret.turret.s.minimapstate)
+    //entity megaturret = turret.turret.s.minimapstate
+    entity megaturret = expect entity( turret.turret.s.minimapstate )
     if ( turret.turret.GetTeam() == 3 || turret.turret.GetTeam() == 2 )
     {
-	    turret.minimapstate.Minimap_AlwaysShow( TEAM_IMC, null )
-	    turret.minimapstate.Minimap_AlwaysShow( TEAM_MILITIA, null )
-        turret.minimapstate.Minimap_SetCustomState( eMinimapObject_prop_script.FW_BUILDSITE_SHIELDED )
+	    megaturret.Minimap_AlwaysShow( TEAM_IMC, null )
+	    megaturret.Minimap_AlwaysShow( TEAM_MILITIA, null )
+        megaturret.Minimap_SetCustomState( eMinimapObject_prop_script.FW_BUILDSITE_SHIELDED )
     }
     else
     {
-        SetTeam( turret.minimapstate , 1 )
-	    turret.minimapstate.Minimap_AlwaysShow( TEAM_IMC, null )
-	    turret.minimapstate.Minimap_AlwaysShow( TEAM_MILITIA, null )
-        turret.minimapstate.Minimap_SetCustomState( eMinimapObject_prop_script.FW_BUILDSITE_SHIELDED )
+        SetTeam( megaturret , 1 )
+	    megaturret.Minimap_AlwaysShow( TEAM_IMC, null )
+	    megaturret.Minimap_AlwaysShow( TEAM_MILITIA, null )
+        megaturret.Minimap_SetCustomState( eMinimapObject_prop_script.FW_BUILDSITE_SHIELDED )
     }
     turret.turret.SetMaxHealth( 20000 )
     turret.turret.SetHealth( 20000 )
