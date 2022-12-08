@@ -19,7 +19,7 @@ void function CreateGamemodeFW()
 	GameMode_Create( FORT_WAR )
 	GameMode_SetName( FORT_WAR, "#GAMEMODE_fw" )
 	GameMode_SetDesc( FORT_WAR, "#PL_fw_desc" )
-	GameMode_SetGameModeAnnouncement( FORT_WAR, "ffa_modeDesc" ) // fw lines are unfortunately not registered to faction dialogue
+	GameMode_SetGameModeAnnouncement( FORT_WAR, "fortwar_modeName" ) // fw lines are unfortunately not registered to faction dialogue
 	
 		#if SERVER
 			GameMode_AddServerInit( FORT_WAR, GamemodeFW_Init ) // doesn't exist yet lol
