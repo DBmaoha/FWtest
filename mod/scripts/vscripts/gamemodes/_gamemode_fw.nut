@@ -13,6 +13,7 @@ global struct TurretSite
     entity site
     entity turret
     entity minimapstate
+    string turretflagid
 }
 struct {
     array<HarvesterStruct> harvesters
@@ -144,12 +145,17 @@ void function EntityEnterFWTrig( entity trigger, entity ent, entity caller, var 
             thread EnemyAreaThreatLevelThink( ent )
         }
         else
+        {
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyEnterFriendlyArea" )
+            thread PlayerInAreaThink( ent , TEAM_MILITIA )
+        }
     }
     if ( ent.GetTeam() == TEAM_IMC )
     {
         if ( Distance( trigger.GetOrigin() , fw_harvesterMlt.harvester.GetOrigin() ) > Distance( trigger.GetOrigin() , fw_harvesterImc.harvester.GetOrigin() ) )
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyEnterFriendlyArea" )
+            thread PlayerInAreaThink( ent , TEAM_IMC )
+        }
         else
         {
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyEnterEnemyArea" )
@@ -171,12 +177,17 @@ void function EntityLeaveFWTrig( entity trigger, entity ent, entity caller, var 
             ent.Signal( "LeaveEnemyArea" )
         }
         else
+        {
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyExitFriendlyArea" )
+            thread PlayerLeaveAreaThink( ent , TEAM_MILITIA )
+        }
     }
     if ( ent.GetTeam() == TEAM_IMC )
     {
         if ( Distance( trigger.GetOrigin() , fw_harvesterMlt.harvester.GetOrigin() ) > Distance( trigger.GetOrigin() , fw_harvesterImc.harvester.GetOrigin() ) )
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyExitFriendlyArea" )
+            thread PlayerLeaveAreaThink( ent , TEAM_IMC )
+        }
         else
         {
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyExitEnemyArea" )
@@ -483,54 +494,63 @@ void function initNetVars()
         {
             SetGlobalNetEnt( "turretSite1" , turret.turret )
             SetGlobalNetInt("turretStateFlags1" , 1  )
+            turret.turretflagid = "turretStateFlags1"
             thread TurretSiteWatcher(turret)
         }
         if ( turret.site.kv.turretId == "1" )
         {
             SetGlobalNetEnt( "turretSite2" , turret.turret )
             SetGlobalNetInt("turretStateFlags2" , 1 )
+            turret.turretflagid = "turretStateFlags2"
             thread TurretSiteWatcher(turret)
         }
         if ( turret.site.kv.turretId == "2" )
         {
             SetGlobalNetEnt( "turretSite3" , turret.turret )
             SetGlobalNetInt("turretStateFlags3" , 1)
+            turret.turretflagid = "turretStateFlags3"
             thread TurretSiteWatcher(turret)
         }
         if ( turret.site.kv.turretId == "3" )
         {
             SetGlobalNetEnt( "turretSite4" , turret.turret )
             SetGlobalNetInt("turretStateFlags4" , 2 )
+            turret.turretflagid = "turretStateFlags4"
             thread TurretSiteWatcher(turret)
         }
         if ( turret.site.kv.turretId == "4" )
         {
             SetGlobalNetEnt( "turretSite5" , turret.turret )
             SetGlobalNetInt("turretStateFlags5" , 2 )
+            turret.turretflagid = "turretStateFlags5"
             thread TurretSiteWatcher(turret)
         }
         if ( turret.site.kv.turretId == "5" )
         {
             SetGlobalNetEnt( "turretSite6" , turret.turret )
             SetGlobalNetInt("turretStateFlags6" , 2 )
+            turret.turretflagid = "turretStateFlags6"
             thread TurretSiteWatcher(turret)
         }
         if ( turret.site.kv.turretId == "6" )
         {
             SetGlobalNetEnt( "turretSite7" , turret.turret )
             SetGlobalNetInt("turretStateFlags7" , 4 )
+            turret.turretflagid = "turretStateFlags7"
             thread TurretSiteWatcher(turret)
         }
         if ( turret.site.kv.turretId == "7" )
         {
             SetGlobalNetEnt( "turretSite8" , turret.turret )
             SetGlobalNetInt("turretStateFlags8" , 4)
+            turret.turretflagid = "turretStateFlags8"
             thread TurretSiteWatcher(turret)
         }
         if ( turret.site.kv.turretId == "8" )
         {
             SetGlobalNetEnt( "turretSite9" , turret.turret )
             SetGlobalNetInt("turretStateFlags9" , 4 )
+            turret.turretflagid = "turretStateFlags9"
             thread TurretSiteWatcher(turret)
         }
     }
