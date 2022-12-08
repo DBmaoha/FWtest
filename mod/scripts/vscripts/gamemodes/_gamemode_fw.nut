@@ -1,12 +1,13 @@
 untyped
 global function GamemodeFW_Init
+global function RateSpawnpoints_FW
 global function SetupFWTerritoryTrigger
 
-global HarvesterStruct& fw_harvester1
-global HarvesterStruct& fw_harvester2
+global HarvesterStruct& fw_harvesterMlt
+global HarvesterStruct& fw_harvesterImc
 
 
-//array< HarvesterStruct& > harvesters = [ fw_harvester1 , fw_harvester2 ]
+//array< HarvesterStruct& > harvesters = [ fw_harvesterMlt , fw_harvesterImc ]
 global struct TurretSite
 {
     entity site
@@ -16,6 +17,7 @@ global struct TurretSite
 struct {
     array<HarvesterStruct> harvesters
     array<entity> camps
+    array<entity> fwTerritories
     array<TurretSite> turretsites
     array<entity> etitaninmlt
     array<entity> etitaninimc
@@ -30,8 +32,8 @@ struct {
 
 void function GamemodeFW_Init()
 {
-    file.harvesters.append(fw_harvester1)
-    file.harvesters.append(fw_harvester2)
+    file.harvesters.append(fw_harvesterMlt)
+    file.harvesters.append(fw_harvesterImc)
     if ( GameRules_GetGameMode() == "fw" )
     {
        AddCallback_EntitiesDidLoad( LoadEntities )
@@ -42,8 +44,55 @@ void function GamemodeFW_Init()
        //noneed to use it rn
        //AddSpawnCallbackEditorClass( "info_target", "info_fw_camp", InitCampTracker )
     }
+
+    // threatLevel signals
+    RegisterSignal( "EnterEnemyArea" )
+    RegisterSignal( "LeaveEnemyArea" )
 }
 
+void function RateSpawnpoints_FW( int checkClass, array<entity> spawnpoints, int team, entity player )
+{
+    if ( HasSwitchedSides() )
+		team = GetOtherTeam( team )
+
+	// check hardpoints, determine which ones we own
+	array<entity> startSpawns = SpawnPoints_GetPilotStart( team )
+	vector averageFriendlySpawns
+
+	// average out startspawn positions
+	foreach ( entity spawnpoint in startSpawns )
+		averageFriendlySpawns += spawnpoint.GetOrigin()
+
+	averageFriendlySpawns /= startSpawns.len()
+
+	entity friendlyTerritory // determine our furthest out hardpoint
+	foreach ( entity territory in file.fwTerritories )
+	{
+		if ( team == TEAM_MILITIA )
+        {
+            if ( Distance( territory.GetOrigin() , fw_harvesterMlt.harvester.GetOrigin() ) < Distance( territory.GetOrigin() , fw_harvesterImc.harvester.GetOrigin() ) )
+                friendlyTerritory = territory
+        }
+        if ( team == TEAM_IMC )
+        {
+            if ( Distance( territory.GetOrigin() , fw_harvesterMlt.harvester.GetOrigin() ) > Distance( territory.GetOrigin() , fw_harvesterImc.harvester.GetOrigin() ) )
+                friendlyTerritory = territory
+        }
+	}
+
+	vector ratingPos
+	if ( IsValid( friendlyTerritory ) )
+		ratingPos = friendlyTerritory.GetOrigin()
+	else
+		ratingPos = averageFriendlySpawns
+
+	foreach ( entity spawnpoint in spawnpoints )
+	{
+		// idk about magic number here really
+		float rating = 1.0 - ( Distance2D( spawnpoint.GetOrigin(), ratingPos ) / 1000.0 )
+		spawnpoint.CalculateRating( checkClass, player.GetTeam(), rating, rating )
+	}
+}
 
 
 void function InitCampTracker( entity camp )
@@ -77,6 +126,7 @@ void function SetupFWTerritoryTrigger( entity trigger )
 		}
     }*/
     print("trigger_fw_territory detected")
+    file.fwTerritories.append( trigger )
     trigger.ConnectOutput( "OnStartTouch", EntityEnterFWTrig )
 	trigger.ConnectOutput( "OnEndTouch", EntityLeaveFWTrig )
 }
@@ -88,17 +138,23 @@ void function EntityEnterFWTrig( entity trigger, entity ent, entity caller, var 
         return
     if ( ent.GetTeam() == TEAM_MILITIA )
     {
-        if ( Distance( ent.GetOrigin() , fw_harvester1.harvester.GetOrigin() ) > Distance( ent.GetOrigin() , fw_harvester2.harvester.GetOrigin() ) )
+        if ( Distance( trigger.GetOrigin() , fw_harvesterMlt.harvester.GetOrigin() ) > Distance( trigger.GetOrigin() , fw_harvesterImc.harvester.GetOrigin() ) )
+        {
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyEnterEnemyArea" )
+            thread EnemyAreaThreatLevelThink( ent )
+        }
         else
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyEnterFriendlyArea" )
     }
     if ( ent.GetTeam() == TEAM_IMC )
     {
-        if ( Distance( ent.GetOrigin() , fw_harvester1.harvester.GetOrigin() ) > Distance( ent.GetOrigin() , fw_harvester2.harvester.GetOrigin() ) )
+        if ( Distance( trigger.GetOrigin() , fw_harvesterMlt.harvester.GetOrigin() ) > Distance( trigger.GetOrigin() , fw_harvesterImc.harvester.GetOrigin() ) )
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyEnterFriendlyArea" )
         else
+        {
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyEnterEnemyArea" )
+            thread EnemyAreaThreatLevelThink( ent )
+        }
     }
 }
 void function EntityLeaveFWTrig( entity trigger, entity ent, entity caller, var value )
@@ -109,18 +165,56 @@ void function EntityLeaveFWTrig( entity trigger, entity ent, entity caller, var 
         return
     if ( ent.GetTeam() == TEAM_MILITIA )
     {
-        if ( Distance( ent.GetOrigin() , fw_harvester1.harvester.GetOrigin() ) > Distance( ent.GetOrigin() , fw_harvester2.harvester.GetOrigin() ) )
+        if ( Distance( trigger.GetOrigin() , fw_harvesterMlt.harvester.GetOrigin() ) > Distance( trigger.GetOrigin() , fw_harvesterImc.harvester.GetOrigin() ) )
+        {
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyExitEnemyArea" )
+            ent.Signal( "LeaveEnemyArea" )
+        }
         else
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyExitFriendlyArea" )
     }
     if ( ent.GetTeam() == TEAM_IMC )
     {
-        if ( Distance( ent.GetOrigin() , fw_harvester1.harvester.GetOrigin() ) > Distance( ent.GetOrigin() , fw_harvester2.harvester.GetOrigin() ) )
+        if ( Distance( trigger.GetOrigin() , fw_harvesterMlt.harvester.GetOrigin() ) > Distance( trigger.GetOrigin() , fw_harvesterImc.harvester.GetOrigin() ) )
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyExitFriendlyArea" )
         else
+        {
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyExitEnemyArea" )
+            ent.Signal( "LeaveEnemyArea" )
+        }
     }
+}
+
+void function EnemyAreaThreatLevelThink( entity player )
+{
+    player.Signal( "EnterEnemyArea" )
+    player.EndSignal( "EnterEnemyArea" )
+
+    int team = player.GetTeam()
+    if( team == TEAM_IMC )
+    {
+        SetGlobalNetInt( "milTowerThreatLevel", GetGlobalNetInt( "milTowerThreatLevel" ) + 1 )
+    }
+    else if( team == TEAM_MILITIA )
+    {
+        SetGlobalNetInt( "imcTowerThreatLevel", GetGlobalNetInt( "imcTowerThreatLevel" ) + 1 )
+    }
+
+    OnThreadEnd(
+        function():( team )
+        {
+            if( team == TEAM_IMC )
+            {
+                SetGlobalNetInt( "milTowerThreatLevel", GetGlobalNetInt( "milTowerThreatLevel" ) - 1 )
+            }
+            else if( team == TEAM_MILITIA )
+            {
+                SetGlobalNetInt( "imcTowerThreatLevel", GetGlobalNetInt( "imcTowerThreatLevel" ) - 1 )
+            }
+        }
+    )
+
+    player.WaitSignal( "LeaveEnemyArea" )
 }
 
 void function startFWHarvester()
@@ -130,10 +224,10 @@ void function startFWHarvester()
 	    thread HarvesterThink(fd_harvester)
 	    thread HarvesterAlarm(fd_harvester)
     }*/
-    thread HarvesterThink(fw_harvester1)
-	thread HarvesterAlarm(fw_harvester1)
-    thread HarvesterThink(fw_harvester2)
-	thread HarvesterAlarm(fw_harvester2)
+    thread HarvesterThink(fw_harvesterMlt)
+	thread HarvesterAlarm(fw_harvesterMlt)
+    thread HarvesterThink(fw_harvesterImc)
+	thread HarvesterAlarm(fw_harvesterImc)
     thread UpdateHarvesterHealth( TEAM_IMC )
     thread UpdateHarvesterHealth( TEAM_MILITIA )
 }
@@ -223,37 +317,37 @@ function FW_OnUseBatteryPort( entBeingUse, user )
 void function FW_createHarvester()
 {
 
-	fw_harvester1 = SpawnHarvester( file.harvester1_info.GetOrigin(), file.harvester1_info.GetAngles(), GetCurrentPlaylistVarInt( "fd_harvester_health", 25000 ), GetCurrentPlaylistVarInt( "fd_harvester_shield", 6000 ), TEAM_MILITIA )
-	fw_harvester1.harvester.Minimap_SetAlignUpright( true )
-	fw_harvester1.harvester.Minimap_AlwaysShow( TEAM_IMC, null )
-	fw_harvester1.harvester.Minimap_AlwaysShow( TEAM_MILITIA, null )
-	fw_harvester1.harvester.Minimap_SetHeightTracking( true )
-	fw_harvester1.harvester.Minimap_SetZOrder( MINIMAP_Z_OBJECT )
-	fw_harvester1.harvester.Minimap_SetCustomState( eMinimapObject_prop_script.FD_HARVESTER )
-	AddEntityCallback_OnDamaged( fw_harvester1.harvester, OnHarvesterDamaged )
-    fw_harvester1.harvester.SetScriptName("fw_team_tower")
+	fw_harvesterMlt = SpawnHarvester( file.harvester1_info.GetOrigin(), file.harvester1_info.GetAngles(), GetCurrentPlaylistVarInt( "fd_harvester_health", 25000 ), GetCurrentPlaylistVarInt( "fd_harvester_shield", 6000 ), TEAM_MILITIA )
+	fw_harvesterMlt.harvester.Minimap_SetAlignUpright( true )
+	fw_harvesterMlt.harvester.Minimap_AlwaysShow( TEAM_IMC, null )
+	fw_harvesterMlt.harvester.Minimap_AlwaysShow( TEAM_MILITIA, null )
+	fw_harvesterMlt.harvester.Minimap_SetHeightTracking( true )
+	fw_harvesterMlt.harvester.Minimap_SetZOrder( MINIMAP_Z_OBJECT )
+	fw_harvesterMlt.harvester.Minimap_SetCustomState( eMinimapObject_prop_script.FD_HARVESTER )
+	AddEntityCallback_OnDamaged( fw_harvesterMlt.harvester, OnHarvesterDamaged )
+    fw_harvesterMlt.harvester.SetScriptName("fw_team_tower")
 
 
 
-    fw_harvester2 = SpawnHarvester( file.harvester2_info.GetOrigin(), file.harvester2_info.GetAngles(), GetCurrentPlaylistVarInt( "fd_harvester_health", 25000 ), GetCurrentPlaylistVarInt( "fd_harvester_shield", 6000 ), TEAM_IMC )
-	fw_harvester2.harvester.Minimap_SetAlignUpright( true )
-	fw_harvester2.harvester.Minimap_AlwaysShow( TEAM_IMC, null )
-	fw_harvester2.harvester.Minimap_AlwaysShow( TEAM_MILITIA, null )
-	fw_harvester2.harvester.Minimap_SetHeightTracking( true )
-	fw_harvester2.harvester.Minimap_SetZOrder( MINIMAP_Z_OBJECT )
-	fw_harvester2.harvester.Minimap_SetCustomState( eMinimapObject_prop_script.FD_HARVESTER )
-    AddEntityCallback_OnDamaged( fw_harvester2.harvester, OnHarvesterDamaged )
-    fw_harvester2.harvester.SetScriptName("fw_team_tower")
+    fw_harvesterImc = SpawnHarvester( file.harvester2_info.GetOrigin(), file.harvester2_info.GetAngles(), GetCurrentPlaylistVarInt( "fd_harvester_health", 25000 ), GetCurrentPlaylistVarInt( "fd_harvester_shield", 6000 ), TEAM_IMC )
+	fw_harvesterImc.harvester.Minimap_SetAlignUpright( true )
+	fw_harvesterImc.harvester.Minimap_AlwaysShow( TEAM_IMC, null )
+	fw_harvesterImc.harvester.Minimap_AlwaysShow( TEAM_MILITIA, null )
+	fw_harvesterImc.harvester.Minimap_SetHeightTracking( true )
+	fw_harvesterImc.harvester.Minimap_SetZOrder( MINIMAP_Z_OBJECT )
+	fw_harvesterImc.harvester.Minimap_SetCustomState( eMinimapObject_prop_script.FD_HARVESTER )
+    AddEntityCallback_OnDamaged( fw_harvesterImc.harvester, OnHarvesterDamaged )
+    fw_harvesterImc.harvester.SetScriptName("fw_team_tower")
 
 
 
 
 
     entity tracker1 = GetAvailableBaseLocationTracker( )
-    tracker1.SetOwner(fw_harvester1.harvester)
+    tracker1.SetOwner(fw_harvesterMlt.harvester)
     DispatchSpawn( tracker1 )
     entity tracker2 = GetAvailableBaseLocationTracker( )
-    tracker2.SetOwner(fw_harvester2.harvester)
+    tracker2.SetOwner(fw_harvesterImc.harvester)
     DispatchSpawn( tracker2 )
     SetLocationTrackerRadius( tracker1 , 3000 )
     SetLocationTrackerRadius( tracker2 , 3000 )
@@ -277,13 +371,13 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
 		return
     if ( harvester.GetTeam() == 3 )
     {
-        fw_harvester1.lastDamage = Time()
+        fw_harvesterMlt.lastDamage = Time()
         if ( harvester.GetHealth() == 0 )
             SetWinner(TEAM_IMC)
     }
     if ( harvester.GetTeam() == 2 )
     {
-        fw_harvester2.lastDamage = Time()
+        fw_harvesterImc.lastDamage = Time()
         if ( harvester.GetHealth() == 0 )
             SetWinner(TEAM_MILITIA)
     }
@@ -303,9 +397,9 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
         return
     HarvesterStruct harvesterstruct
     if( harvester.GetTeam() == TEAM_MILITIA )
-        harvesterstruct = fw_harvester1
+        harvesterstruct = fw_harvesterMlt
     if( harvester.GetTeam() == TEAM_IMC )
-        harvesterstruct = fw_harvester2
+        harvesterstruct = fw_harvesterImc
 
 
 
@@ -569,9 +663,9 @@ void function UpdateHarvesterHealth( int team )
 {
     entity harvester
     if( team == TEAM_MILITIA )
-        harvester = fw_harvester1.harvester
+        harvester = fw_harvesterMlt.harvester
     if( team == TEAM_IMC )
-        harvester = fw_harvester2.harvester
+        harvester = fw_harvesterImc.harvester
 
     while( true )
     {
