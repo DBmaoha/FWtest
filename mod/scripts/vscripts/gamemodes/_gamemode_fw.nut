@@ -1004,7 +1004,7 @@ void function TurretFlagOnDamage_threaded( entity turret )
 {
     turret.Signal( "FlashTurretFlag" )
     turret.EndSignal( "FlashTurretFlag" ) // save for continously damages
-    //turret.EndSignal( "OnDeath" ) // end the function for deaths
+    turret.EndSignal( "OnDeath" ) // end the function for deaths
     string flag = expect string( turret.s.turretflagid )
     if ( turret.GetTeam() == TEAM_IMC )
     {
@@ -1026,7 +1026,7 @@ void function NeturalTurretFlagOnDamage_threaded( entity turret )
 {
     turret.Signal( "FlashTurretFlag" )
     turret.EndSignal( "FlashTurretFlag" ) // save for continously damages
-    //turret.EndSignal( "OnDeath" ) // end the function for deaths
+    turret.EndSignal( "OnDeath" ) // end the function for deaths
     string flag = expect string( turret.s.turretflagid )
     if ( turret.GetTeam() == TEAM_IMC )
     {
