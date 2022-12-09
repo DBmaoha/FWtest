@@ -7,6 +7,9 @@ global function RateSpawnpoints_FW
 global function ReplaceMegaTurretFromTurretInfo
 global function GetTurretInfoFromMegaTurret
 
+// fw specific titanfalls
+global function FW_PlayerInFriendlyTerritory
+global function FW_ReCalculateTitanReplacementPoint
 
 // basically needs to match "waves count - bosswaves count"
 const int FW_MAX_LEVELS = 3
@@ -284,6 +287,7 @@ void function FWAiCampThink( CampSiteStruct campsite )
                     SetGlobalNetInt( alertVarName, FW_MAX_LEVELS - 1 )
                 else
                     SetGlobalNetInt( alertVarName, alertLevel + 1 ) // normal level up
+                // can't use float rn
                 //SetGlobalNetFloat( stressVarName, 1.0 ) // refill
                 AddIgnoredCountToOtherCamps( campsite )
                 break
@@ -291,6 +295,7 @@ void function FWAiCampThink( CampSiteStruct campsite )
 
             // update stress bar
             float campStressLeft = float( killsNeeded ) / float( killsToEscalate )
+            // can't use float rn
             //SetGlobalNetFloat( stressVarName, campStressLeft )
             //print( "campStressLeft: " + string( campStressLeft ) )
 
@@ -356,7 +361,7 @@ void function FW_HandleSquadSpawn( array<entity> guys, CampSiteStruct campsite, 
 {
 	foreach ( entity guy in guys )
 	{
-		guy.EnableNPCFlag( NPC_ALLOW_PATROL | NPC_ALLOW_INVESTIGATE | NPC_ALLOW_HAND_SIGNALS | NPC_ALLOW_FLEE )
+		guy.EnableNPCFlag( NPC_ALLOW_HAND_SIGNALS | NPC_ALLOW_FLEE ) // NPC_ALLOW_PATROL | NPC_ALLOW_INVESTIGATE is not allowed
 		guy.SetScriptName( FW_NPC_SCRIPTNAME ) // well no need
         // show on minimap to let players kill them
         guy.Minimap_AlwaysShow( TEAM_MILITIA, null )
@@ -447,8 +452,77 @@ void function SetupFWTerritoryTrigger( entity trigger )
         SetTeam( trigger, TEAM_MILITIA )
 }
 
+bool function FW_PlayerInFriendlyTerritory( entity player )
+{
+    foreach( entity trigger in file.fwTerritories )
+    {
+        if( trigger.GetTeam() == player.GetTeam() ) // is it friendly one?
+        {
+            if( GetAllEntitiesInTrigger( trigger ).contains( player ) ) // is player inside?
+                return true
+        }
+    }
+    return false // can't find the player
+}
+
+// territory trigger don't have a kv.radius, let's use a const
+// 1800 will pretty much get harvester's near titan startpoints
+const float FW_SPAWNPOINT_SEARCH_RADIUS = 1800
+
+vector function FW_ReCalculateTitanReplacementPoint( vector baseOrigin, int team )
+{
+    entity teamHarvester
+    // find team's harvester
+    if( team == TEAM_IMC )
+        teamHarvester = fw_harvesterImc.harvester
+    else if( team == TEAM_MILITIA )
+        teamHarvester = fw_harvesterMlt.harvester
+    else
+        unreachable // crash the game
+
+    if( Distance2D( baseOrigin, teamHarvester.GetOrigin() ) <= FW_SPAWNPOINT_SEARCH_RADIUS ) // close enough!
+        return baseOrigin // this origin is good enough
+    
+    // if not close enough to base, re-calculate
+    array<entity> fortWarPoints = FW_GetTitanSpawnPointsForTeam( team )
+	entity validPoint = GetClosest( fortWarPoints, baseOrigin )
+	return validPoint.GetOrigin()
+}
+
+array<entity> function FW_GetTitanSpawnPointsForTeam( int team )
+{
+    array<entity> validSpawnPoints
+    entity teamHarvester
+    // find team's harvester
+    if( team == TEAM_IMC )
+        teamHarvester = fw_harvesterImc.harvester
+    else if( team == TEAM_MILITIA )
+        teamHarvester = fw_harvesterMlt.harvester
+    else
+        unreachable // crash the game
+    
+    array<entity> allPoints
+    // same as _replacement_titans_drop.gnut does
+    allPoints.extend( GetEntArrayByClass_Expensive( "info_spawnpoint_titan" ) )
+    allPoints.extend( GetEntArrayByClass_Expensive( "info_spawnpoint_titan_start" ) )
+    allPoints.extend( GetEntArrayByClass_Expensive( "info_replacement_titan_spawn" ) )
+
+    // get valid points from all points
+    foreach( entity point in allPoints )
+    {
+        if( Distance2D( point.GetOrigin(), teamHarvester.GetOrigin() ) <= FW_SPAWNPOINT_SEARCH_RADIUS )
+            validSpawnPoints.append( point )
+    }
+
+    return validSpawnPoints
+}
+
 void function EntityEnterFWTrig( entity trigger, entity ent, entity caller, var value )
 {
+    if( !IsValid( ent ) ) // post-spawns
+        return
+    if( !ent.IsPlayer() && !ent.IsNPC() ) // no neet to add props i guess
+        return
     // functions that trigger_multiple missing
     if( IsValid( ent ) )
     {
@@ -471,6 +545,10 @@ void function EntityEnterFWTrig( entity trigger, entity ent, entity caller, var 
 
 void function EntityLeaveFWTrig( entity trigger, entity ent, entity caller, var value )
 {
+    if( !IsValid( ent ) ) // post-spawns
+        return
+    if( !ent.IsPlayer() && !ent.IsNPC() ) // no neet to remove props i guess
+        return
     // functions that trigger_multiple missing
     if( IsValid( ent ) )
     {
@@ -619,13 +697,13 @@ void function LoadEntities()
 				case "info_fw_team_tower":
                     if ( info_target.GetTeam() == TEAM_MILITIA )
                     {
-                        entity prop = CreatePropDynamic( info_target.GetModelName(), info_target.GetOrigin(), info_target.GetAngles(), 6 )
+                        //entity prop = CreatePropDynamic( info_target.GetModelName(), info_target.GetOrigin(), info_target.GetAngles(), 6 )
 					    file.harvesterMlt_info = info_target
                         print("fw_tower tracker spawned")
                     }
                     if ( info_target.GetTeam() == TEAM_IMC )
                     {
-                        entity prop = CreatePropDynamic( info_target.GetModelName(), info_target.GetOrigin(), info_target.GetAngles(), 6 )
+                        //entity prop = CreatePropDynamic( info_target.GetModelName(), info_target.GetOrigin(), info_target.GetAngles(), 6 )
 					    file.harvesterImc_info = info_target
                         print("fw_tower tracker spawned")
                     }
@@ -757,8 +835,9 @@ void function FW_createHarvester()
 	fw_harvesterMlt.harvester.Minimap_SetZOrder( MINIMAP_Z_OBJECT )
 	fw_harvesterMlt.harvester.Minimap_SetCustomState( eMinimapObject_prop_script.FD_HARVESTER )
 	AddEntityCallback_OnDamaged( fw_harvesterMlt.harvester, OnHarvesterDamaged )
-    SetDefaultMPEnemyHighlight( fw_harvesterMlt.harvester ) // fw's harvester needs this
-    fw_harvesterMlt.harvester.SetScriptName("fw_team_tower")
+    //Highlight_SetEnemyHighlight( fw_harvesterMlt.harvester, "fw_enemy" ) // fw's harvester needs this
+    // don't set this, or sonar pulse will try to find it and failed to set highlight
+    //fw_harvesterMlt.harvester.SetScriptName("fw_team_tower")
 
     fw_harvesterImc = SpawnHarvester( file.harvesterImc_info.GetOrigin(), file.harvesterImc_info.GetAngles(), GetCurrentPlaylistVarInt( "fd_harvester_health", 25000 ), GetCurrentPlaylistVarInt( "fd_harvester_shield", 6000 ), TEAM_IMC )
 	fw_harvesterImc.harvester.Minimap_SetAlignUpright( true )
@@ -768,8 +847,9 @@ void function FW_createHarvester()
 	fw_harvesterImc.harvester.Minimap_SetZOrder( MINIMAP_Z_OBJECT )
 	fw_harvesterImc.harvester.Minimap_SetCustomState( eMinimapObject_prop_script.FD_HARVESTER )
     AddEntityCallback_OnDamaged( fw_harvesterImc.harvester, OnHarvesterDamaged )
-    SetDefaultMPEnemyHighlight( fw_harvesterMlt.harvester ) // fw's harvester needs this
-    fw_harvesterImc.harvester.SetScriptName("fw_team_tower")
+    //Highlight_SetEnemyHighlight( fw_harvesterMlt.harvester, "fw_enemy" ) // fw's harvester needs this
+    // don't set this, or sonar pulse will try to find it and failed to set highlight
+    //fw_harvesterImc.harvester.SetScriptName("fw_team_tower")
 
     entity trackerMlt = GetAvailableBaseLocationTracker( )
     trackerMlt.SetOwner(fw_harvesterMlt.harvester)
@@ -1004,6 +1084,8 @@ void function initNetVars()
         {
             camp.campId = "A"
             SetGlobalNetInt( "fwCampAlertA", 0 )
+            SetGlobalNetInt( "fwCampStressA", 1 )
+            // can't use float rn
             //SetGlobalNetFloat( "fwCampStressA", 1.0 )
             SetLocationTrackerID( camp.tracker, 0 )
             file.trackedCampNPCSpawns["A"] <- {}
@@ -1013,6 +1095,8 @@ void function initNetVars()
         {
             camp.campId = "B"
             SetGlobalNetInt( "fwCampAlertB", 0 )
+            SetGlobalNetInt( "fwCampStressB", 1 )
+            // can't use float rn
             //SetGlobalNetFloat( "fwCampStressB", 1.0 )
             SetLocationTrackerID( camp.tracker, 1 )
             file.trackedCampNPCSpawns["B"] <- {}
@@ -1022,6 +1106,8 @@ void function initNetVars()
         {
             camp.campId = "C"
             SetGlobalNetInt( "fwCampAlertC", 0 )
+            SetGlobalNetInt( "fwCampStressC", 1 )
+            // can't use float rn
             //SetGlobalNetFloat( "fwCampStressC", 1.0 )
             SetLocationTrackerID( camp.tracker, 2 )
             file.trackedCampNPCSpawns["C"] <- {}
@@ -1132,7 +1218,10 @@ void function HarvesterThink( HarvesterStruct fd_harvester )
 			isRegening = false
 
 		if ( ( lastShieldHealth > 0 ) && ( harvester.GetShieldHealth() == 0 ) )
+        {
+            EmitSoundOnEntity( harvester, "TitanWar_Harvester_ShieldDown" ) // add this
 			EmitSoundOnEntity( harvester, "coop_generator_shielddown" )
+        }
 
 		lastShieldHealth = harvester.GetShieldHealth()
 		lastTime = currentTime

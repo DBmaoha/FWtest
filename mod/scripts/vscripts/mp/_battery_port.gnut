@@ -40,7 +40,7 @@ void function InitTurretBatteryPort( entity batteryPort )
 
     /* // not used yet
     array<entity> allTurrets = GetNPCArrayByClass( "npc_turret_mega" )
-    entity turret = GetClosest( allTurrets, batteryPort.GetOrigin(), 65535 ) // get nearest turret
+    entity turret = GetClosest( allTurrets, batteryPort.GetOrigin() ) // get nearest turret
     BatteryPortStruct initStruct
     initStruct.batteryPort = batteryPort
     initStruct.turret = turret
@@ -365,7 +365,7 @@ void function PortBatteryRemoval_ShowBattery( entity player )
 entity function GetNearestMegaTurret( entity ent )
 {
     array<entity> allTurrets = GetNPCArrayByClass( "npc_turret_mega" )
-    entity turret = GetClosest( allTurrets, ent.GetOrigin(), 65535 )
+    entity turret = GetClosest( allTurrets, ent.GetOrigin() )
     return turret
 }
 
