@@ -89,6 +89,9 @@ void function GamemodeFW_Init()
     file.harvesters.append(fw_harvesterMlt)
     file.harvesters.append(fw_harvesterImc)
 
+    AiGameModes_SetGruntWeapons( [ "mp_weapon_rspn101", "mp_weapon_dmr", "mp_weapon_r97", "mp_weapon_lmg" ] )
+	AiGameModes_SetSpectreWeapons( [ "mp_weapon_hemlok_smg", "mp_weapon_doubletake", "mp_weapon_mastiff" ] )
+
     AddCallback_EntitiesDidLoad( LoadEntities )
     AddCallback_GameStateEnter( eGameState.Prematch, OnFWGamePrematch )
     AddCallback_GameStateEnter( eGameState.Playing, OnFWGamePlaying )
@@ -923,17 +926,17 @@ void function TurretFlagOnDamage_threaded( entity turret )
     turret.EndSignal( "FlashTurretFlag" ) // save for continously damages
     //turret.EndSignal( "OnDeath" ) // end the function for deaths
     string flag = expect string( turret.s.turretflagid )
-    if ( turret.GetTeam() == TEAM_IMC && GetGlobalNetInt( "turretStateFlags" + flag ) != 26 )
+    if ( turret.GetTeam() == TEAM_IMC )
     {
         SetGlobalNetInt( "turretStateFlags" + flag, 26 )
-        wait 3
+        wait 2
         SetGlobalNetInt( "turretStateFlags" + flag, 10 )
         return
     }
-    if( turret.GetTeam() == TEAM_MILITIA && GetGlobalNetInt( "turretStateFlags" + flag ) != 28 )
+    if( turret.GetTeam() == TEAM_MILITIA )
     {
         SetGlobalNetInt( "turretStateFlags" + flag, 28 )
-        wait 3
+        wait 2
         SetGlobalNetInt( "turretStateFlags" + flag, 13 )
         return
     }
@@ -945,14 +948,14 @@ void function NeturalTurretFlagOnDamage_threaded( entity turret )
     turret.EndSignal( "FlashTurretFlag" ) // save for continously damages
     //turret.EndSignal( "OnDeath" ) // end the function for deaths
     string flag = expect string( turret.s.turretflagid )
-    if ( turret.GetTeam() == TEAM_IMC && GetGlobalNetInt( "turretStateFlags" + flag ) != 18 )
+    if ( turret.GetTeam() == TEAM_IMC )
     {
         SetGlobalNetInt( "turretStateFlags" + flag, 18 )
         wait 2
         SetGlobalNetInt( "turretStateFlags" + flag, 2 )
         return
     }
-    if( turret.GetTeam() == TEAM_MILITIA && GetGlobalNetInt( "turretStateFlags" + flag ) != 21 )
+    if( turret.GetTeam() == TEAM_MILITIA )
     {
         SetGlobalNetInt( "turretStateFlags" + flag, 21 )
         wait 2
