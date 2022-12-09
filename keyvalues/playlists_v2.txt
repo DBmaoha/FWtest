@@ -12,7 +12,7 @@ playlists
 				description #PL_fw_desc
 				abbreviation #PL_fw_abbr
 					
-				max_players 12
+				max_players 16
 				max_teams 2
 				classic_mp 1
 				scorelimit 100 // score is a percentage so ofc need max to be 100%
@@ -34,7 +34,7 @@ playlists
 				abbreviation #PL_fw_abbr
 				image fw
 				
-				max_players 12
+				max_players 16
 				max_teams 2
 				classic_mp 1
 				scorelimit 100
