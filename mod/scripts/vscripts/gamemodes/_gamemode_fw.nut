@@ -887,18 +887,30 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
     if ( !damageSourceID && !damageAmount && !attacker )
         return
 
+    if ( damageSourceID == eDamageSourceId.mp_titancore_laser_cannon )
+        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/100 ) // laser core shreds super well for some reason
+
+    if ( damageSourceID == eDamageSourceId.mp_titanweapon_flightcore_rockets )
+        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/4 ) // flight core shreds super well for some reason
+
+    if ( damageSourceID == eDamageSourceId.mp_titanweapon_meteor ||
+        damageSourceID == eDamageSourceId.mp_titanweapon_flame_wall ||
+        damageSourceID == eDamageSourceId.mp_titanability_slow_trap
+    )
+        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/5 ) // nerf scorch
+
     HarvesterStruct harvesterstruct // current harveter's struct
     if( harvester.GetTeam() == TEAM_MILITIA )
         harvesterstruct = fw_harvesterMlt
     if( harvester.GetTeam() == TEAM_IMC )
         harvesterstruct = fw_harvesterImc
 
-    if ( harvester.GetShieldHealth() - damageAmount <= 0 )
+    if ( harvester.GetShieldHealth() - damageAmount <= 0 ) // this shot breaks shield
     {
         if ( !attacker.IsTitan() && attacker.IsPlayer() )
         {
             Remote_CallFunction_NonReplay( attacker , "ServerCallback_FW_NotifyTitanRequired" )
-            DamageInfo_SetDamage( damageInfo, harvester.GetShieldHealth() )
+            DamageInfo_SetDamage( damageInfo, 0 )
             return
         }
         if( !harvesterstruct.harvesterShieldDown )
@@ -947,18 +959,6 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
         harvesterstruct.havesterWasDamaged = true
     }
 
-    if ( damageSourceID == eDamageSourceId.mp_titancore_laser_cannon )
-        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/100 ) // laser core shreds super well for some reason
-
-    if ( damageSourceID == eDamageSourceId.mp_titanweapon_flightcore_rockets )
-        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/4 ) // flight core shreds super well for some reason
-
-    if ( damageSourceID == eDamageSourceId.mp_titanweapon_meteor ||
-        damageSourceID == eDamageSourceId.mp_titanweapon_flame_wall ||
-        damageSourceID == eDamageSourceId.mp_titanability_slow_trap
-    )
-        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/3 ) // nerf scorch
-
     if ( attacker.IsPlayer() )
     {
         attacker.NotifyDidDamage( harvester, DamageInfo_GetHitBox( damageInfo ), DamageInfo_GetDamagePosition( damageInfo ), DamageInfo_GetCustomDamageType( damageInfo ), DamageInfo_GetDamage( damageInfo ), DamageInfo_GetDamageFlags( damageInfo ), DamageInfo_GetHitGroup( damageInfo ), DamageInfo_GetWeapon( damageInfo ), DamageInfo_GetDistFromAttackOrigin( damageInfo ) )
@@ -967,7 +967,11 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
 
     harvesterstruct.lastDamage = Time()
     if ( harvester.GetHealth() == 0 )
-        SetWinner( GetOtherTeam( harvester.GetTeam() ) )
+    {
+        int winnerTeam = GetOtherTeam( harvester.GetTeam() )
+        SetWinner( winnerTeam )
+        GameRules_SetTeamScore2( winnerTeam, 0 ) // force set score to 0
+    }
 }
 
 void function OnMegaTurretDamaged( entity turret, var damageInfo )
@@ -983,7 +987,7 @@ void function OnMegaTurretDamaged( entity turret, var damageInfo )
         {
             if( attacker.GetTeam() != turret.GetTeam() ) // good to have
                 MessageToPlayer( attacker, eEventNotifications.TurretTitanDamageOnly )
-            DamageInfo_SetDamage( damageInfo, turret.GetShieldHealth() )
+            DamageInfo_SetDamage( damageInfo, 0 )
             return
         }
     }
@@ -1272,12 +1276,14 @@ void function UpdateHarvesterHealth( int team )
     {
         if( IsValid(harvester) )
         {
-            GameRules_SetTeamScore2(team, 1.0 * harvester.GetShieldHealth()/harvester.GetShieldHealthMax() * 100 )
+            GameRules_SetTeamScore2( team, 1.0 * harvester.GetShieldHealth() / harvester.GetShieldHealthMax() * 100 )
             WaitFrame()
         }
         else
         {
-            SetWinner( GetOtherTeam(team) )
+            int winnerTeam = GetOtherTeam(team)
+            SetWinner( winnerTeam )
+            GameRules_SetTeamScore2( winnerTeam, 0 ) // force set score to 0
             break
         }
     }
