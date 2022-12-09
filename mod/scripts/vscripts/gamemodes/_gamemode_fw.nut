@@ -4,8 +4,8 @@ global function RateSpawnpoints_FW
 //global function SetupFWTerritoryTrigger
 
 // for battery_port.gnut to work
-global function ReplaceMegaTurretFromTurretInfo
-global function GetTurretInfoFromMegaTurret
+global function FW_ReplaceMegaTurretFromTurretInfo
+global function FW_GetTurretInfoFromMegaTurret
 
 // fw specific titanfalls
 global function FW_PlayerInFriendlyTerritory
@@ -664,9 +664,15 @@ void function FWAreaThreatLevelThink_Threaded()
 
         foreach( entity titan in allTitans )
         {
-            if( !imcEntArray.contains( titan ) && !mltEntArray.contains( titan ) && titan.GetTeam() != TEAM_IMC )
+            if( !imcEntArray.contains( titan ) 
+                && !mltEntArray.contains( titan ) 
+                && titan.GetTeam() != TEAM_IMC
+                && !titan.e.isHotDropping )
                 warnImcTitanApproach = true // this titan must be in neatural space
-            if( !mltEntArray.contains( titan ) && !imcEntArray.contains( titan ) && titan.GetTeam() != TEAM_MILITIA )
+            if( !mltEntArray.contains( titan ) 
+                && !imcEntArray.contains( titan ) 
+                && titan.GetTeam() != TEAM_MILITIA
+                && !titan.e.isHotDropping )
                 warnMltTitanApproach = true // this titan must be in neatural space
         }
 
@@ -776,7 +782,7 @@ void function LoadEntities()
 }
 
 // for battery_port, replace the turret with new one
-entity function ReplaceMegaTurretFromTurretInfo( entity info_target )
+entity function FW_ReplaceMegaTurretFromTurretInfo( entity info_target )
 {
     TurretSite curTurretSite
     // find turretSiteStruct and add it
@@ -816,7 +822,7 @@ entity function ReplaceMegaTurretFromTurretInfo( entity info_target )
 }
 
 // can only get turrets create from CreateMegaTurretFromTurretInfo()
-entity function GetTurretInfoFromMegaTurret( entity turret )
+entity function FW_GetTurretInfoFromMegaTurret( entity turret )
 {
     foreach( TurretSite turretsite in file.turretsites )
     {
@@ -941,14 +947,17 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
         harvesterstruct.havesterWasDamaged = true
     }
 
-    if ( DamageInfo_GetDamageSourceIdentifier( damageInfo ) == eDamageSourceId.mp_titancore_laser_cannon )
+    if ( damageSourceID == eDamageSourceId.mp_titancore_laser_cannon )
         DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/100 ) // laser core shreds super well for some reason
 
-    if ( DamageInfo_GetDamageSourceIdentifier( damageInfo ) == eDamageSourceId.mp_titanweapon_meteor ||
-            DamageInfo_GetDamageSourceIdentifier( damageInfo ) == eDamageSourceId.mp_titanweapon_flame_wall ||
-            DamageInfo_GetDamageSourceIdentifier( damageInfo ) == eDamageSourceId.mp_titanability_slow_trap
+    if ( damageSourceID == eDamageSourceId.mp_titanweapon_flightcore_rockets )
+        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/4 ) // flight core shreds super well for some reason
+
+    if ( damageSourceID == eDamageSourceId.mp_titanweapon_meteor ||
+        damageSourceID == eDamageSourceId.mp_titanweapon_flame_wall ||
+        damageSourceID == eDamageSourceId.mp_titanability_slow_trap
     )
-        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/2 )
+        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/3 ) // nerf scorch
 
     if ( attacker.IsPlayer() )
     {
@@ -963,6 +972,7 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
 
 void function OnMegaTurretDamaged( entity turret, var damageInfo )
 {
+    int damageSourceID = DamageInfo_GetDamageSourceIdentifier( damageInfo )
     entity attacker = DamageInfo_GetAttacker( damageInfo )
     float damageAmount = DamageInfo_GetDamage( damageInfo )
     int scriptType = DamageInfo_GetCustomDamageType( damageInfo )
@@ -977,6 +987,11 @@ void function OnMegaTurretDamaged( entity turret, var damageInfo )
             return
         }
     }
+    if ( damageSourceID == eDamageSourceId.mp_titanweapon_meteor ||
+        damageSourceID == eDamageSourceId.mp_titanweapon_flame_wall ||
+        damageSourceID == eDamageSourceId.mp_titanability_slow_trap
+    )
+        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/2 ) // nerf scorch
     if( turret.GetHealth() <= DamageInfo_GetDamage( damageInfo ) ) // killshot
     {
         string flag = expect string( turret.s.turretflagid )

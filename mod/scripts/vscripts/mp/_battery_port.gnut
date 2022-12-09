@@ -1,3 +1,4 @@
+// this script is highly related with _gamemode_fw.nut!!!
 untyped
 global function InitTurretBatteryPort // only for fw turrets!
 
@@ -29,8 +30,9 @@ void function InitTurretBatteryPort( entity batteryPort )
     {
         SetTeam( batteryPort, turret.GetTeam() )
         batteryPort.s.relatedTurret = turret
+        thread TrackTurretLifeTime( batteryPort, turret )
     }
-    entity turretInfo = GetTurretInfoFromMegaTurret( turret )
+    entity turretInfo = FW_GetTurretInfoFromMegaTurret( turret )
     if( IsValid( turretInfo ) )
         batteryPort.s.relatedTurretInfo = turretInfo
 
@@ -47,6 +49,20 @@ void function InitTurretBatteryPort( entity batteryPort )
     initStruct.hasBattery = false
     initStruct.lastBatteryAppliedTime = -1.0 // not used yet
     */
+}
+
+void function TrackTurretLifeTime( entity batteryPort, entity turret )
+{
+    batteryPort.EndSignal( "OnDestroy" )
+    turret.EndSignal( "OnDestroy" )
+
+    turret.WaitSignal( "OnDeath" )
+    entity battery = expect entity( batteryPort.s.batteryPackInside )
+    if( IsValid( battery ) ) // clear battery inside turret, wait for players recharge it
+    {
+        battery.Destroy()
+        batteryPort.s.batteryPackInside = null
+    }
 }
 
 function OnUseTurretBatteryPort( entBeingUse, user )
@@ -207,10 +223,11 @@ void function ApplyBatteryToBatteryPort( entity player, entity batteryPort )
     if( !IsAlive( turret ) ) // turret has been killed!
     {
         entity info = expect entity( batteryPort.s.relatedTurretInfo )
-        turret = ReplaceMegaTurretFromTurretInfo( info )
+        turret = FW_ReplaceMegaTurretFromTurretInfo( info )
         if( !IsValid( turret ) ) // replace failed!
             return
         batteryPort.s.relatedTurret = turret
+        thread TrackTurretLifeTime( batteryPort, turret ) // start a new track
         turretReplaced = true // if turret has been replaced, must reset team!
     }
 
@@ -243,7 +260,7 @@ void function ApplyBatteryToBatteryPort( entity player, entity batteryPort )
     }
 
     // restore turret health
-    turret.SetHealth( turret.GetMaxHealth() )
+    //turret.SetHealth( turret.GetMaxHealth() ) // this can be too much powerful
     turret.SetShieldHealth( turret.GetShieldHealthMax() )
     EmitSoundOnEntityOnlyToPlayer( player, player, "UI_TitanBattery_Pilot_Give_TitanBattery" )
 }
