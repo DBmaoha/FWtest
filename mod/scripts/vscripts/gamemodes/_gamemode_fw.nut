@@ -870,7 +870,7 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
 
     harvesterstruct.lastDamage = Time()
     if ( harvester.GetHealth() == 0 )
-        SetWinner(TEAM_IMC)
+        SetWinner( GetOtherTeam( harvester.GetTeam() ) )
 }
 
 void function OnMegaTurretDamaged( entity turret, var damageInfo )
