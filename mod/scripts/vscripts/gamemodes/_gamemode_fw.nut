@@ -95,6 +95,9 @@ void function GamemodeFW_Init()
 
     ScoreEvent_SetupEarnMeterValuesForMixedModes()
 
+    ClassicMP_ForceDisableEpilogue( true ) // temp
+
+    RegisterSignal( "FlashTurretFlag" )
     // need to be in LoadEntities(), before harvester creation
     //AddSpawnCallbackEditorClass( "trigger_multiple", "trigger_fw_territory", SetupFWTerritoryTrigger )
     // noneed to use it rn
@@ -580,9 +583,9 @@ void function FWAreaThreatLevelThink_Threaded()
 
         foreach( entity titan in allTitans )
         {
-            if( !imcEntArray.contains( titan ) && titan.GetTeam() != TEAM_IMC )
+            if( !imcEntArray.contains( titan ) && !mltEntArray.contains( titan ) && titan.GetTeam() != TEAM_IMC )
                 warnImcTitanApproach = true // this titan must be in neatural space
-            if( !mltEntArray.contains( titan ) && titan.GetTeam() != TEAM_MILITIA )
+            if( !mltEntArray.contains( titan ) && !imcEntArray.contains( titan ) && titan.GetTeam() != TEAM_MILITIA )
                 warnMltTitanApproach = true // this titan must be in neatural space
         }
 
@@ -914,7 +917,8 @@ void function TurretFlagDamageCallback( entity turret, var damageInfo )
 
 void function TurretFlagOnDamage_threaded( entity turret )
 {
-    turret.EndSignal( "OnDamaged" ) // save for continously damages
+    turret.Signal( "FlashTurretFlag" )
+    turret.EndSignal( "FlashTurretFlag" ) // save for continously damages
     turret.EndSignal( "OnDeath" ) // end the function for deaths
     string flag = expect string( turret.s.turretflagid )
     if ( turret.GetTeam() == TEAM_IMC && GetGlobalNetInt( "turretStateFlags" + flag ) != 26 )
@@ -935,7 +939,8 @@ void function TurretFlagOnDamage_threaded( entity turret )
 
 void function NeturalTurretFlagOnDamage_threaded( entity turret )
 {
-    turret.EndSignal( "OnDamaged" ) // save for continously damages
+    turret.Signal( "FlashTurretFlag" )
+    turret.EndSignal( "FlashTurretFlag" ) // save for continously damages
     turret.EndSignal( "OnDeath" ) // end the function for deaths
     string flag = expect string( turret.s.turretflagid )
     if ( turret.GetTeam() == TEAM_IMC && GetGlobalNetInt( "turretStateFlags" + flag ) != 18 )
