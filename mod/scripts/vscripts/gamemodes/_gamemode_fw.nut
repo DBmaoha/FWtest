@@ -11,6 +11,13 @@ global function FW_GetTurretInfoFromMegaTurret
 global function FW_PlayerInFriendlyTerritory
 global function FW_ReCalculateTitanReplacementPoint
 
+// default havester settings
+const int FW_DEFAULT_HARVESTER_HEALTH = 25000
+const int FW_DEFAULT_HARVESTER_SHIELD = 5000
+// default turret settings
+const int FW_DEFAULT_TURRET_HEALTH = 12500
+const int FW_DEFAULT_TURRET_SHIELD = 4000
+
 // basically needs to match "waves count - bosswaves count"
 const int FW_MAX_LEVELS = 3
 
@@ -807,6 +814,9 @@ entity function FW_ReplaceMegaTurretFromTurretInfo( entity info_target )
     turret.s.minimapstate <- perviousTurret.s.minimapstate
     turret.s.turretflagid <- perviousTurret.s.turretflagid
 
+    string idString = expect string( perviousTurret.s.turretflagid )
+    SetGlobalNetEnt( "turretSite" + idString, turret )
+
     // update turretSiteStruct
     foreach( TurretSite turretsite in file.turretsites )
     {
@@ -833,7 +843,7 @@ entity function FW_GetTurretInfoFromMegaTurret( entity turret )
 
 void function FW_createHarvester()
 {
-	fw_harvesterMlt = SpawnHarvester( file.harvesterMlt_info.GetOrigin(), file.harvesterMlt_info.GetAngles(), GetCurrentPlaylistVarInt( "fd_harvester_health", 25000 ), GetCurrentPlaylistVarInt( "fd_harvester_shield", 6000 ), TEAM_MILITIA )
+	fw_harvesterMlt = SpawnHarvester( file.harvesterMlt_info.GetOrigin(), file.harvesterMlt_info.GetAngles(), GetCurrentPlaylistVarInt( "fd_harvester_health", FW_DEFAULT_HARVESTER_HEALTH ), GetCurrentPlaylistVarInt( "fd_harvester_shield", FW_DEFAULT_HARVESTER_SHIELD ), TEAM_MILITIA )
     fw_harvesterMlt.harvester.Minimap_SetAlignUpright( true )
 	fw_harvesterMlt.harvester.Minimap_AlwaysShow( TEAM_IMC, null )
 	fw_harvesterMlt.harvester.Minimap_AlwaysShow( TEAM_MILITIA, null )
@@ -845,7 +855,7 @@ void function FW_createHarvester()
     // don't set this, or sonar pulse will try to find it and failed to set highlight
     //fw_harvesterMlt.harvester.SetScriptName("fw_team_tower")
 
-    fw_harvesterImc = SpawnHarvester( file.harvesterImc_info.GetOrigin(), file.harvesterImc_info.GetAngles(), GetCurrentPlaylistVarInt( "fd_harvester_health", 25000 ), GetCurrentPlaylistVarInt( "fd_harvester_shield", 6000 ), TEAM_IMC )
+    fw_harvesterImc = SpawnHarvester( file.harvesterImc_info.GetOrigin(), file.harvesterImc_info.GetAngles(), GetCurrentPlaylistVarInt( "fd_harvester_health", FW_DEFAULT_HARVESTER_HEALTH ), GetCurrentPlaylistVarInt( "fd_harvester_shield", FW_DEFAULT_HARVESTER_SHIELD ), TEAM_IMC )
 	fw_harvesterImc.harvester.Minimap_SetAlignUpright( true )
 	fw_harvesterImc.harvester.Minimap_AlwaysShow( TEAM_IMC, null )
 	fw_harvesterImc.harvester.Minimap_AlwaysShow( TEAM_MILITIA, null )
@@ -1000,6 +1010,7 @@ void function OnMegaTurretDamaged( entity turret, var damageInfo )
     {
         string flag = expect string( turret.s.turretflagid )
         SetGlobalNetInt( "turretStateFlags" + flag, 1 ) // set turretSite to grey until it gets fixed
+        SetTeam( turret, TEAM_UNASSIGNED ) // don't let anything target it
         return // don't trigger icon changes
     }
 
@@ -1079,7 +1090,7 @@ void function initNetVars()
         int team = turret.turret.GetTeam()
         int stateFlag = 1 // netural
         turret.turret.s.IsOrigin <- false
-        if( team == TEAM_IMC )
+        if( team == TEAM_IMC ) // spawn with teamNumber?
         {
             stateFlag = 10 // 10 means origin TEAM_IMC turret
             turret.turret.s.IsOrigin = true
@@ -1090,6 +1101,7 @@ void function initNetVars()
             turret.turret.s.IsOrigin = true
         }
 
+        print( "Try to set globatNetEnt: " + "turretSite" + idString )
         SetGlobalNetEnt( "turretSite" + idString, turret.turret )
         SetGlobalNetInt( "turretStateFlags" + idString, stateFlag )
         turret.turret.s.turretflagid <- idString
@@ -1154,9 +1166,9 @@ void function TurretSiteWatcher( TurretSite turret )
 	    megaturret.Minimap_AlwaysShow( TEAM_MILITIA, null )
         megaturret.Minimap_SetCustomState( eMinimapObject_prop_script.FW_BUILDSITE_SHIELDED )
     }
-    turret.turret.SetMaxHealth( 20000 )
-    turret.turret.SetHealth( 20000 )
-    turret.turret.SetShieldHealthMax( 10000 )
+    turret.turret.SetMaxHealth( FW_DEFAULT_TURRET_HEALTH )
+    turret.turret.SetHealth( FW_DEFAULT_TURRET_HEALTH )
+    turret.turret.SetShieldHealthMax( FW_DEFAULT_TURRET_SHIELD )
 }
 
 void function HarvesterThink( HarvesterStruct fd_harvester )
