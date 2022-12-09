@@ -747,13 +747,14 @@ entity function GetTurretInfoFromMegaTurret( entity turret )
 void function FW_createHarvester()
 {
 	fw_harvesterMlt = SpawnHarvester( file.harvesterMlt_info.GetOrigin(), file.harvesterMlt_info.GetAngles(), GetCurrentPlaylistVarInt( "fd_harvester_health", 25000 ), GetCurrentPlaylistVarInt( "fd_harvester_shield", 6000 ), TEAM_MILITIA )
-	fw_harvesterMlt.harvester.Minimap_SetAlignUpright( true )
+    fw_harvesterMlt.harvester.Minimap_SetAlignUpright( true )
 	fw_harvesterMlt.harvester.Minimap_AlwaysShow( TEAM_IMC, null )
 	fw_harvesterMlt.harvester.Minimap_AlwaysShow( TEAM_MILITIA, null )
 	fw_harvesterMlt.harvester.Minimap_SetHeightTracking( true )
 	fw_harvesterMlt.harvester.Minimap_SetZOrder( MINIMAP_Z_OBJECT )
 	fw_harvesterMlt.harvester.Minimap_SetCustomState( eMinimapObject_prop_script.FD_HARVESTER )
 	AddEntityCallback_OnDamaged( fw_harvesterMlt.harvester, OnHarvesterDamaged )
+    SetDefaultMPEnemyHighlight( fw_harvesterMlt.harvester ) // fw's harvester needs this
     fw_harvesterMlt.harvester.SetScriptName("fw_team_tower")
 
     fw_harvesterImc = SpawnHarvester( file.harvesterImc_info.GetOrigin(), file.harvesterImc_info.GetAngles(), GetCurrentPlaylistVarInt( "fd_harvester_health", 25000 ), GetCurrentPlaylistVarInt( "fd_harvester_shield", 6000 ), TEAM_IMC )
@@ -764,6 +765,7 @@ void function FW_createHarvester()
 	fw_harvesterImc.harvester.Minimap_SetZOrder( MINIMAP_Z_OBJECT )
 	fw_harvesterImc.harvester.Minimap_SetCustomState( eMinimapObject_prop_script.FD_HARVESTER )
     AddEntityCallback_OnDamaged( fw_harvesterImc.harvester, OnHarvesterDamaged )
+    SetDefaultMPEnemyHighlight( fw_harvesterMlt.harvester ) // fw's harvester needs this
     fw_harvesterImc.harvester.SetScriptName("fw_team_tower")
 
     entity trackerMlt = GetAvailableBaseLocationTracker( )
@@ -919,7 +921,7 @@ void function TurretFlagOnDamage_threaded( entity turret )
 {
     turret.Signal( "FlashTurretFlag" )
     turret.EndSignal( "FlashTurretFlag" ) // save for continously damages
-    turret.EndSignal( "OnDeath" ) // end the function for deaths
+    //turret.EndSignal( "OnDeath" ) // end the function for deaths
     string flag = expect string( turret.s.turretflagid )
     if ( turret.GetTeam() == TEAM_IMC && GetGlobalNetInt( "turretStateFlags" + flag ) != 26 )
     {
@@ -941,7 +943,7 @@ void function NeturalTurretFlagOnDamage_threaded( entity turret )
 {
     turret.Signal( "FlashTurretFlag" )
     turret.EndSignal( "FlashTurretFlag" ) // save for continously damages
-    turret.EndSignal( "OnDeath" ) // end the function for deaths
+    //turret.EndSignal( "OnDeath" ) // end the function for deaths
     string flag = expect string( turret.s.turretflagid )
     if ( turret.GetTeam() == TEAM_IMC && GetGlobalNetInt( "turretStateFlags" + flag ) != 18 )
     {
@@ -1173,13 +1175,3 @@ void function UpdateHarvesterHealth( int team )
         }
     }
 }
-
-
-
-
-
-
-
-
-
-

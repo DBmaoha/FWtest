@@ -35,7 +35,7 @@ void function InitTurretBatteryPort( entity batteryPort )
         batteryPort.s.relatedTurretInfo = turretInfo
 
     batteryPort.SetUsableByGroup( "pilot" )
-    batteryPort.SetUsePrompts( "#HOLD_TO_USE_GENERIC", "#PRESS_TO_USE_GENERIC" ) // don't know what to use
+    batteryPort.SetUsePrompts( "#FW_USE_GENERATOR_NO_BATTERY", "#FW_USE_GENERATOR_NO_BATTERY" ) // don't know what to use
     AddCallback_OnUseEntity( batteryPort, OnUseTurretBatteryPort )
 
     /* // not used yet
