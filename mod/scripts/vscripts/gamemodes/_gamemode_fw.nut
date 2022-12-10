@@ -99,8 +99,7 @@ struct
 
 void function GamemodeFW_Init()
 {
-    file.harvesters.append(fw_harvesterMlt)
-    file.harvesters.append(fw_harvesterImc)
+    InitDestroyableGenerator()
 
     AiGameModes_SetGruntWeapons( [ "mp_weapon_rspn101", "mp_weapon_dmr", "mp_weapon_r97", "mp_weapon_lmg" ] )
 	AiGameModes_SetSpectreWeapons( [ "mp_weapon_hemlok_smg", "mp_weapon_doubletake", "mp_weapon_mastiff" ] )
@@ -1203,6 +1202,9 @@ void function FW_createHarvester()
     //Highlight_SetEnemyHighlight( fw_harvesterMlt.harvester, "fw_enemy" ) // fw's harvester needs this
     // don't set this, or sonar pulse will try to find it and failed to set highlight
     //fw_harvesterImc.harvester.SetScriptName("fw_team_tower")
+
+    file.harvesters.append(fw_harvesterMlt)
+    file.harvesters.append(fw_harvesterImc)
 
     entity trackerMlt = GetAvailableBaseLocationTracker()
     trackerMlt.SetOwner( fw_harvesterMlt.harvester )
