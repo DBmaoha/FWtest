@@ -244,6 +244,9 @@ void function ApplyBatteryToBatteryPort( entity player, entity batteryPort )
     turret.SetHealth( min( turret.GetMaxHealth(), turret.GetHealth() + ( turret.GetMaxHealth() / 2 ) ) )
     turret.SetShieldHealth( turret.GetShieldHealthMax() )
     EmitSoundOnEntityOnlyToPlayer( player, player, "UI_TitanBattery_Pilot_Give_TitanBattery" )
+
+    // give player titan meter
+    AddPlayerScore( player, "PilotBatteryApplied", player )
 }
 
 void function PlayerRemoveBatteryPackFromPort( entity player, entity batteryPort )
