@@ -173,6 +173,7 @@ void function RateSpawnpoints_FW( int checkClass, array<entity> spawnpoints, int
 
 void function OnFWGamePrematch()
 {
+    InitFWScoreEvents()
     FW_createHarvester()
     InitFWCampSites()
     InitCampSpawnerLevel()
@@ -189,6 +190,42 @@ void function OnFWGamePlaying()
 //////////////////////////////////
 ///// CALLBACK FUNCTIONS END /////
 //////////////////////////////////
+
+
+//////////////////////////////////
+///// SCORE EVENTS FUNCTIONS /////
+//////////////////////////////////
+
+void function InitFWScoreEvents()
+{
+    // current using scoreEvents
+    ScoreEvent_SetEarnMeterValues( "KillHeavyTurret", 0.0, 0.20 ) // only adds to titan's in this mode
+
+    // save for later use of scoreEvents
+	ScoreEvent_SetEarnMeterValues( "FortWarAssault", 0.10, 0.15 )
+	ScoreEvent_SetEarnMeterValues( "FortWarDefense", 0.05, 0.10 )
+	ScoreEvent_SetEarnMeterValues( "FortWarPerimeterDefense", 0.05, 0.10 )
+	ScoreEvent_SetEarnMeterValues( "FortWarSiege", 0.1, 0.15 )
+	ScoreEvent_SetEarnMeterValues( "FortWarSnipe", 0.1, 0.15 )
+    ScoreEvent_SetEarnMeterValues( "FortWarBaseConstruction", 0.1, 0.15 )
+	ScoreEvent_SetEarnMeterValues( "FortWarForwardConstruction", 0.1, 0.15 )
+    ScoreEvent_SetEarnMeterValues( "FortWarInvasiveConstruction", 0.1, 0.15 )
+	ScoreEvent_SetEarnMeterValues( "FortWarResourceDenial", 0.1, 0.15 )
+    ScoreEvent_SetEarnMeterValues( "FortWarTowerDamage", 0.1, 0.15 )
+    ScoreEvent_SetEarnMeterValues( "FortWarTowerDefense", 0.1, 0.15 )
+    ScoreEvent_SetEarnMeterValues( "FortWarTeamTurretControlBonus_One", 0.1, 0.15 )
+    ScoreEvent_SetEarnMeterValues( "FortWarTeamTurretControlBonus_Two", 0.1, 0.15 )
+    ScoreEvent_SetEarnMeterValues( "FortWarTeamTurretControlBonus_Three", 0.1, 0.15 )
+    ScoreEvent_SetEarnMeterValues( "FortWarTeamTurretControlBonus_Four", 0.1, 0.15 )
+    ScoreEvent_SetEarnMeterValues( "FortWarTeamTurretControlBonus_Five", 0.1, 0.15 )
+    ScoreEvent_SetEarnMeterValues( "FortWarTeamTurretControlBonus_Six", 0.1, 0.15 )
+    ScoreEvent_SetEarnMeterValues( "FortWarSecuringGatheredResources", 0.1, 0.15 )
+    ScoreEvent_SetEarnMeterValues( "FortWarShieldDestroyed", 0.1, 0.15 )
+}
+
+//////////////////////////////////////
+///// SCORE EVENTS FUNCTIONS END /////
+//////////////////////////////////////
 
 
 
@@ -283,6 +320,8 @@ void function LoadEntities()
                     prop.kv.fadedist = 10000 // try not to fade
                     InitTurretBatteryPort( prop )
                     break
+                //case "script_power_up_other":
+                //    entity powerUp = CreateEntity( "item_powerup" )
 			}
 		}
 	}
@@ -555,7 +594,7 @@ void function FW_HandleSquadSpawn( array<entity> guys, CampSiteStruct campsite, 
 {
 	foreach ( entity guy in guys )
 	{
-		guy.EnableNPCFlag( NPC_ALLOW_HAND_SIGNALS | NPC_ALLOW_FLEE ) // NPC_ALLOW_PATROL | NPC_ALLOW_INVESTIGATE is not allowed
+		guy.EnableNPCFlag( NPC_ALLOW_PATROL | NPC_ALLOW_HAND_SIGNALS | NPC_ALLOW_FLEE ) // NPC_ALLOW_INVESTIGATE is not allowed
 		guy.SetScriptName( FW_NPC_SCRIPTNAME ) // well no need
         // show on minimap to let players kill them
         guy.Minimap_AlwaysShow( TEAM_MILITIA, null )
@@ -593,6 +632,7 @@ void function FW_SpawnReaper( CampSiteStruct campsite )
 	})
 }
 
+// maybe this will make them stay around the camp
 void function FW_ForceAssaultInCamp( array<entity> guys, entity camp )
 {
     while( true )
@@ -603,7 +643,8 @@ void function FW_ForceAssaultInCamp( array<entity> guys, entity camp )
             if( IsValid( guy ) )
             {
                 guy.AssaultPoint( camp.GetOrigin() )
-                guy.AssaultSetGoalRadius( float( camp.kv.radius ) / 2 ) // the camp's radius
+                guy.AssaultSetGoalRadius( float( camp.kv.radius ) / 2 ) // the camp's radius / 2
+                guy.AssaultSetFightRadius( 0 )
                 oneGuyValid = true
             }
         }
