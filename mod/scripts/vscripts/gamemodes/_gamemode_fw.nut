@@ -145,7 +145,7 @@ void function FWForceChangeMap_Threaded()
     int curMapIdx = FW_ALLOWED_MAPS.find( mapName )
 
     int nextMapIdx = curMapIdx + 1
-    if( nextMapIdx + 1 >= FW_ALLOWED_MAPS.len() ) // last map
+    if( nextMapIdx + 1 > FW_ALLOWED_MAPS.len() ) // last map
         nextMapIdx = 0
 
     GameRules_ChangeMap( FW_ALLOWED_MAPS[ nextMapIdx ], "fw" )

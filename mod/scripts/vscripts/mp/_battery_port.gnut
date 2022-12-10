@@ -23,7 +23,7 @@ void function InitTurretBatteryPort( entity batteryPort )
 {
     batteryPort.s.relatedTurret <- null             // entity, for saving batteryPort's nearest turret
     batteryPort.s.relatedTurretInfo <- null         // entity
-    batteryPort.s.hasBattery <- false               // bool
+    //batteryPort.s.hasBattery <- false             // bool, batteryPackInside is enough
     batteryPort.s.batteryPackInside <- null         // entity
     batteryPort.s.beingUsed <- false                // bool
 
