@@ -4,6 +4,7 @@ global function InitTurretBatteryPort // only for fw turrets!
 
 const asset BATTERY_PORT_USE_HINT_MODEL = $"models/weapons/bullets/mgl_grenade.mdl"
 
+/* // using entity.s instead
 global struct BatteryPortStruct
 {
     entity batteryPort
@@ -16,10 +17,11 @@ struct
 {
     array<BatteryPortStruct> allBatteryPorts
 } file
+*/
 
 void function InitTurretBatteryPort( entity batteryPort )
 {
-    batteryPort.s.relatedTurret <- null             // entity
+    batteryPort.s.relatedTurret <- null             // entity, for saving batteryPort's nearest turret
     batteryPort.s.relatedTurretInfo <- null         // entity
     batteryPort.s.hasBattery <- false               // bool
     batteryPort.s.batteryPackInside <- null         // entity
@@ -40,7 +42,7 @@ void function InitTurretBatteryPort( entity batteryPort )
     batteryPort.SetUsePrompts( "#FW_USE_GENERATOR_NO_BATTERY", "#FW_USE_GENERATOR_NO_BATTERY" ) // don't know what to use
     AddCallback_OnUseEntity( batteryPort, OnUseTurretBatteryPort )
 
-    /* // not used yet
+    /* // using entity.s instead
     array<entity> allTurrets = GetNPCArrayByClass( "npc_turret_mega" )
     entity turret = GetClosest( allTurrets, batteryPort.GetOrigin() ) // get nearest turret
     BatteryPortStruct initStruct
@@ -81,7 +83,7 @@ void function TryUseTurretBatteryPort( entity player, entity batteryPort )
 
     player.EndSignal( "OnDeath" )
     player.EndSignal( "OnDestroy" )
-    player.EndSignal( "ScriptAnimStop" )
+    player.EndSignal( "ScriptAnimStop" ) // so you can jump off animation
     AddButtonPressedPlayerInputCallback( player, IN_JUMP, ForceStopUseBatteryPort )
 
     OnThreadEnd(
@@ -96,7 +98,8 @@ void function TryUseTurretBatteryPort( entity player, entity batteryPort )
     if( !IsValid( turret ) ) // turret has been destroyed!
         return
 
-    bool sameTeam = turret.GetTeam() == player.GetTeam() || turret.GetTeam() == TEAM_BOTH // get turret's team
+    // get turret's team, decide behavior
+    bool sameTeam = turret.GetTeam() == player.GetTeam() || turret.GetTeam() == TEAM_BOTH || turret.GetTeam() == TEAM_UNASSIGNED
     if( IsValid( batteryPort.s.batteryPackInside ) && !sameTeam ) // port already has a battery
     {
         // enemy try to remove it
@@ -233,34 +236,12 @@ void function ApplyBatteryToBatteryPort( entity player, entity batteryPort )
 
     if( turret.GetTeam() != player.GetTeam() || turretReplaced ) // is there a need to change team?
     {
-        bool isOriginTurret = expect bool( turret.s.IsOrigin )
-        
-        entity minimapTurret = expect entity( turret.s.minimapstate )
-        string turretId = expect string( turret.s.turretflagid )
         SetTeam( turret, player.GetTeam() )
-        SetTeam( minimapTurret, player.GetTeam() )
-
-        int stateFlag = 1 // netural
-        if ( player.GetTeam() == TEAM_IMC )
-        {
-            if( isOriginTurret )
-                stateFlag = 10 // 10 means origin TEAM_IMC turret
-            else
-                stateFlag = 2 // 2 means TEAM_IMC
-        }
-        else
-        {
-            if( isOriginTurret )
-                stateFlag = 13 // 13 means origin TEAM_MILITIA turret
-            else
-                stateFlag = 4 // 4 means TEAM_MILITIA
-        }
-
-        SetGlobalNetInt( "turretStateFlags" + turretId, stateFlag ) // for rui objects to work
     }
 
     // restore turret health
-    //turret.SetHealth( turret.GetMaxHealth() ) // this can be too much powerful
+    // this can be too much powerful
+    turret.SetHealth( min( turret.GetMaxHealth(), turret.GetHealth() + ( turret.GetMaxHealth() / 2 ) ) )
     turret.SetShieldHealth( turret.GetShieldHealthMax() )
     EmitSoundOnEntityOnlyToPlayer( player, player, "UI_TitanBattery_Pilot_Give_TitanBattery" )
 }
@@ -354,14 +335,19 @@ void function RemoveBatteryFromPort( entity player, entity batteryPort )
     if( !IsValid( battery ) )
         return
     // destroy the battery, don't give it to any players
-    battery.Destroy() 
+    battery.Destroy()
 
     entity turret = expect entity( batteryPort.s.relatedTurret )
     if( !IsAlive( turret ) ) // turret has been destroyed!
         return
+
     // damaging turret
-    int damageAmount = int( turret.GetMaxHealth() * 0.5 ) // not just shield damage
-    turret.TakeDamage( damageAmount, player, player, { damageSourceId = eDamageSourceId.rodeo_battery_removal, scriptType = damageTypes.rodeoBatteryRemoval } )
+    // take damage won't work, idk why
+    //int damageAmount = int( turret.GetMaxHealth() * 0.5 ) // not just shield damage
+    //turret.TakeDamage( damageAmount, player, player, { damageSourceId = eDamageSourceId.rodeo_battery_removal, scriptType = damageTypes.rodeoBatteryRemoval } )
+    // directly set turret's health
+    turret.SetHealth( max( 0, turret.GetHealth() - ( turret.GetMaxHealth() / 3 ) ) ) // take less damage than applying
+    turret.SetShieldHealth( 0 ) // clean all shields left
     EmitSoundOnEntityOnlyToPlayer( player, player, "UI_TitanBattery_Pilot_Take_TitanBattery" )
 }
 
@@ -413,6 +399,7 @@ void function ClearBatteryAnimTempProps( entity player )
 	player.p.rodeoAnimTempProps.clear()
 }
 
+/* // using entity.s instead
 BatteryPortStruct function GetCurrentStructFromBatteryPort( entity batteryPort )
 {
     BatteryPortStruct tempStruct
@@ -426,3 +413,4 @@ BatteryPortStruct function GetCurrentStructFromBatteryPort( entity batteryPort )
     }
     return tempStruct
 }
+*/
