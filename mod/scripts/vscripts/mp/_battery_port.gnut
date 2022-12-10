@@ -235,7 +235,7 @@ void function ApplyBatteryToBatteryPort( entity player, entity batteryPort )
     if( turret.GetTeam() != player.GetTeam() || turretReplaced ) // is there a need to change team?
     {
         bool isOriginTurret = expect bool( turret.s.IsOrigin )
-        
+
         entity minimapTurret = expect entity( turret.s.minimapstate )
         string turretId = expect string( turret.s.turretflagid )
         SetTeam( turret, player.GetTeam() )
@@ -244,17 +244,29 @@ void function ApplyBatteryToBatteryPort( entity player, entity batteryPort )
         int stateFlag = 1 // netural
         if ( player.GetTeam() == TEAM_IMC )
         {
-            if( isOriginTurret )
-                stateFlag = 10 // 10 means origin TEAM_IMC turret
-            else
-                stateFlag = 2 // 2 means TEAM_IMC
+            stateFlag = 10 //shielded
         }
         else
         {
-            if( isOriginTurret )
-                stateFlag = 13 // 13 means origin TEAM_MILITIA turret
-            else
-                stateFlag = 4 // 4 means TEAM_MILITIA
+            stateFlag = 13 //shielded
+        }
+
+        SetGlobalNetInt( "turretStateFlags" + turretId, stateFlag ) // for rui objects to work
+    }
+    else
+    {
+        entity minimapTurret = expect entity( turret.s.minimapstate )
+        string turretId = expect string( turret.s.turretflagid )
+        SetTeam( turret, player.GetTeam() )
+        SetTeam( minimapTurret, player.GetTeam() )
+        int stateFlag = 1 // netural
+        if ( player.GetTeam() == TEAM_IMC )
+        {
+            stateFlag = 10 //shielded
+        }
+        else
+        {
+            stateFlag = 13 //shielded
         }
 
         SetGlobalNetInt( "turretStateFlags" + turretId, stateFlag ) // for rui objects to work
@@ -356,7 +368,7 @@ void function RemoveBatteryFromPort( entity player, entity batteryPort )
     if( !IsValid( battery ) )
         return
     // destroy the battery, don't give it to any players
-    battery.Destroy() 
+    battery.Destroy()
 
     entity turret = expect entity( batteryPort.s.relatedTurret )
     if( !IsAlive( turret ) ) // turret has been destroyed!
