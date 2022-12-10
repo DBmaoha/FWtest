@@ -55,8 +55,6 @@ playlists
 						mp_eden 1
 						mp_crashsite3 1
 						mp_complex3 1
-						mp_colony02 1
-						mp_relic02 1
 					}
 				}
 			}

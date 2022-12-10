@@ -39,12 +39,15 @@ const int FW_REAPER_MAX_DEPLOYED = 1
 // if other camps been cleaned many times, we levelDown
 const int FW_IGNORE_NEEDED = 2
 
+// debounce for showing damaged infos
+const float FW_HARVESTER_DAMAGED_DEBOUNCE = 5.0
+const float FW_TURRET_DAMAGED_DEBOUNCE = 2.0
+
 global HarvesterStruct& fw_harvesterMlt
 global HarvesterStruct& fw_harvesterImc
 
-
 //array< HarvesterStruct& > harvesters = [ fw_harvesterMlt , fw_harvesterImc ]
-global struct TurretSite
+struct TurretSiteStruct
 {
     entity site
     entity turret
@@ -80,7 +83,7 @@ struct
 
     array<entity> fwTerritories
 
-    array<TurretSite> turretsites
+    array<TurretSiteStruct> turretsites
 
     array<CampSiteStruct> fwCampSites
 
@@ -116,6 +119,11 @@ void function GamemodeFW_Init()
     // noneed to use it rn
     //AddSpawnCallbackEditorClass( "info_target", "info_fw_camp", InitCampTracker )
 }
+
+
+////////////////////////////////
+///// SPAWNPOINT FUNCTIONS /////
+////////////////////////////////
 
 void function RateSpawnpoints_FW( int checkClass, array<entity> spawnpoints, int team, entity player )
 {
@@ -156,10 +164,21 @@ void function RateSpawnpoints_FW( int checkClass, array<entity> spawnpoints, int
 	}
 }
 
+////////////////////////////////////
+///// SPAWNPOINT FUNCTIONS END /////
+////////////////////////////////////
+
+
+
+//////////////////////////////
+///// CALLBACK FUNCTIONS /////
+//////////////////////////////
+
 void function OnFWGamePrematch()
 {
     FW_createHarvester()
-    InitCampSpawner()
+    InitFWCampSites()
+    InitCampSpawnerLevel()
 }
 
 void function OnFWGamePlaying()
@@ -167,9 +186,129 @@ void function OnFWGamePlaying()
     startFWHarvester()
     FWAreaThreatLevelThink()
     StartFWCampThink()
+    InitTurretSettings()
 }
 
-void function InitCampSpawner() // can edit this to make more spawns, alertLevel icons supports max to lv3( 0,1,2 )
+//////////////////////////////////
+///// CALLBACK FUNCTIONS END /////
+//////////////////////////////////
+
+
+
+////////////////////////////////
+///// INITIALIZE FUNCTIONS /////
+////////////////////////////////
+
+void function LoadEntities()
+{
+    // info_target
+	foreach ( entity info_target in GetEntArrayByClass_Expensive( "info_target" ) )
+	{
+		if( info_target.HasKey( "editorclass" ) )
+		{
+			switch( info_target.kv.editorclass )
+			{
+				case "info_fw_team_tower":
+                    if ( info_target.GetTeam() == TEAM_MILITIA )
+                    {
+                        //entity prop = CreatePropDynamic( info_target.GetModelName(), info_target.GetOrigin(), info_target.GetAngles(), 6 )
+					    file.harvesterMlt_info = info_target
+                        print("fw_tower tracker spawned")
+                    }
+                    if ( info_target.GetTeam() == TEAM_IMC )
+                    {
+                        //entity prop = CreatePropDynamic( info_target.GetModelName(), info_target.GetOrigin(), info_target.GetAngles(), 6 )
+					    file.harvesterImc_info = info_target
+                        print("fw_tower tracker spawned")
+                    }
+                    break
+                case "info_fw_camp":
+                    //entity prop = CreatePropDynamic( info_target.GetModelName(), info_target.GetOrigin(), info_target.GetAngles(), 6 )
+                    InitCampTracker( info_target )
+                    print("fw_camp spawned")
+                    break
+                case "info_fw_turret_site":
+
+                    string idString = expect string(info_target.kv.turretId)
+                    int id = int( info_target.kv.turretId )
+                    print("info_fw_turret_siteID : " + idString )
+
+                    // set this for replace function to find
+                    TurretSiteStruct turretsite
+                    file.turretsites.append( turretsite )
+
+                    turretsite.site = info_target
+
+                    // create turret, spawn with no team and set it after game starts
+                    entity turret = CreateNPC( "npc_turret_mega", TEAM_UNASSIGNED, info_target.GetOrigin(), info_target.GetAngles() )
+                    SetSpawnOption_AISettings( turret, "npc_turret_mega_fortwar" )
+                    SetDefaultMPEnemyHighlight( turret ) // for sonar highlights to work
+                    AddEntityCallback_OnDamaged( turret, OnMegaTurretDamaged )
+                    DispatchSpawn( turret )
+
+                    turretsite.turret = turret
+
+                    // init turret settings
+                    turret.s.minimapstate <- null               // entity, for saving turret's minimap handler
+                    turret.s.baseTurret <- false                // bool, is this turret from base
+                    turret.s.turretflagid <- ""                 // string, turret's id like "1", "2", "3"
+                    turret.s.lastDamagedTime <- 0.0             // float, for showing turret underattack icons
+
+                    // minimap icons
+                    entity minimapstate = CreateEntity( "prop_script" )
+                    minimapstate.SetValueForModelKey( info_target.GetModelName() )
+                    minimapstate.SetOrigin( info_target.GetOrigin() )
+                    minimapstate.SetAngles( info_target.GetAngles() )
+                    SetTeam( minimapstate, info_target.GetTeam() )
+                    minimapstate.kv.solid = SOLID_VPHYSICS
+                    DispatchSpawn( minimapstate )
+
+                    turretsite.minimapstate = minimapstate
+                    turret.s.minimapstate = minimapstate
+
+                    break
+			}
+		}
+	}
+
+    // script_ref
+    foreach ( entity script_ref in GetEntArrayByClass_Expensive( "script_ref" ) )
+	{
+		if( script_ref.HasKey( "editorclass" ) )
+		{
+			switch( script_ref.kv.editorclass )
+			{
+                case "info_fw_foundation_plate":
+                    entity prop = CreatePropDynamic( script_ref.GetModelName(), script_ref.GetOrigin(), script_ref.GetAngles(), 6 )
+                    break
+                case "info_fw_battery_port":
+                    entity prop = CreatePropDynamic( script_ref.GetModelName(), script_ref.GetOrigin(), script_ref.GetAngles(), 6 )
+                    prop.kv.fadedist = 10000 // try not to fade
+                    InitTurretBatteryPort( prop )
+                    break
+			}
+		}
+	}
+
+    // trigger_multiple
+    foreach ( entity trigger_multiple in GetEntArrayByClass_Expensive( "trigger_multiple" ) )
+	{
+        if( trigger_multiple.HasKey( "editorclass" ) )
+		{
+			switch( trigger_multiple.kv.editorclass )
+			{
+                case "trigger_fw_territory":
+                    SetupFWTerritoryTrigger( trigger_multiple )
+                    break
+			}
+		}
+    }
+
+    // maybe for tick_spawning reapers?
+	ValidateAndFinalizePendingStationaryPositions()
+}
+
+void function InitCampSpawnerLevel() // can edit this to make more spawns, alertLevel icons supports max to lv3( 0,1,2 )
 {
     // lv1 spawns: grunts
     CampSpawnStruct campSpawnLv1
@@ -197,6 +336,57 @@ void function InitCampSpawner() // can edit this to make more spawns, alertLevel
     campSpawnLv3.killsToEscalate = FW_REAPER_COUNT / 2 // only 1 kill needed to spawn the boss?
 
     file.fwNpcLevel[2] <- campSpawnLv3
+}
+
+////////////////////////////////////
+///// INITIALIZE FUNCTIONS END /////
+////////////////////////////////////
+
+
+
+/////////////////////////////
+///// AICAMPS FUNCTIONS /////
+/////////////////////////////
+
+void function InitFWCampSites()
+{
+    // camps don't have a id, set them manually
+    foreach( int index, CampSiteStruct camp in file.fwCampSites )
+    {
+        if ( index == 0 )
+        {
+            camp.campId = "A"
+            SetGlobalNetInt( "fwCampAlertA", 0 )
+            SetGlobalNetInt( "fwCampStressA", 1 )
+            // can't use float rn
+            //SetGlobalNetFloat( "fwCampStressA", 1.0 )
+            SetLocationTrackerID( camp.tracker, 0 )
+            file.trackedCampNPCSpawns["A"] <- {}
+            continue
+        }
+        if ( index == 1 )
+        {
+            camp.campId = "B"
+            SetGlobalNetInt( "fwCampAlertB", 0 )
+            SetGlobalNetInt( "fwCampStressB", 1 )
+            // can't use float rn
+            //SetGlobalNetFloat( "fwCampStressB", 1.0 )
+            SetLocationTrackerID( camp.tracker, 1 )
+            file.trackedCampNPCSpawns["B"] <- {}
+            continue
+        }
+        if ( index == 2 )
+        {
+            camp.campId = "C"
+            SetGlobalNetInt( "fwCampAlertC", 0 )
+            SetGlobalNetInt( "fwCampStressC", 1 )
+            // can't use float rn
+            //SetGlobalNetFloat( "fwCampStressC", 1.0 )
+            SetLocationTrackerID( camp.tracker, 2 )
+            file.trackedCampNPCSpawns["C"] <- {}
+            continue
+        }
+    }
 }
 
 void function InitCampTracker( entity camp )
@@ -434,6 +624,16 @@ void function FW_WaitToUntrackNPC( entity guy, string campId, string aiType )
 	    file.trackedCampNPCSpawns[ campId ][ aiType ]--
 }
 
+/////////////////////////////////
+///// AICAMPS FUNCTIONS END /////
+/////////////////////////////////
+
+
+
+///////////////////////////////
+///// TERRITORY FUNCTIONS /////
+///////////////////////////////
+
 void function SetupFWTerritoryTrigger( entity trigger )
 {
     /*foreach( trigger in GetEntArrayByClass_Expensive( "trigger_multiple" ) )
@@ -457,71 +657,6 @@ void function SetupFWTerritoryTrigger( entity trigger )
         SetTeam( trigger, TEAM_IMC )
     else
         SetTeam( trigger, TEAM_MILITIA )
-}
-
-bool function FW_PlayerInFriendlyTerritory( entity player )
-{
-    foreach( entity trigger in file.fwTerritories )
-    {
-        if( trigger.GetTeam() == player.GetTeam() ) // is it friendly one?
-        {
-            if( GetAllEntitiesInTrigger( trigger ).contains( player ) ) // is player inside?
-                return true
-        }
-    }
-    return false // can't find the player
-}
-
-// territory trigger don't have a kv.radius, let's use a const
-// 1800 will pretty much get harvester's near titan startpoints
-const float FW_SPAWNPOINT_SEARCH_RADIUS = 1800
-
-vector function FW_ReCalculateTitanReplacementPoint( vector baseOrigin, int team )
-{
-    entity teamHarvester
-    // find team's harvester
-    if( team == TEAM_IMC )
-        teamHarvester = fw_harvesterImc.harvester
-    else if( team == TEAM_MILITIA )
-        teamHarvester = fw_harvesterMlt.harvester
-    else
-        unreachable // crash the game
-
-    if( Distance2D( baseOrigin, teamHarvester.GetOrigin() ) <= FW_SPAWNPOINT_SEARCH_RADIUS ) // close enough!
-        return baseOrigin // this origin is good enough
-
-    // if not close enough to base, re-calculate
-    array<entity> fortWarPoints = FW_GetTitanSpawnPointsForTeam( team )
-	entity validPoint = GetClosest( fortWarPoints, baseOrigin )
-	return validPoint.GetOrigin()
-}
-
-array<entity> function FW_GetTitanSpawnPointsForTeam( int team )
-{
-    array<entity> validSpawnPoints
-    entity teamHarvester
-    // find team's harvester
-    if( team == TEAM_IMC )
-        teamHarvester = fw_harvesterImc.harvester
-    else if( team == TEAM_MILITIA )
-        teamHarvester = fw_harvesterMlt.harvester
-    else
-        unreachable // crash the game
-
-    array<entity> allPoints
-    // same as _replacement_titans_drop.gnut does
-    allPoints.extend( GetEntArrayByClass_Expensive( "info_spawnpoint_titan" ) )
-    allPoints.extend( GetEntArrayByClass_Expensive( "info_spawnpoint_titan_start" ) )
-    allPoints.extend( GetEntArrayByClass_Expensive( "info_replacement_titan_spawn" ) )
-
-    // get valid points from all points
-    foreach( entity point in allPoints )
-    {
-        if( Distance2D( point.GetOrigin(), teamHarvester.GetOrigin() ) <= FW_SPAWNPOINT_SEARCH_RADIUS )
-            validSpawnPoints.append( point )
-    }
-
-    return validSpawnPoints
 }
 
 void function EntityEnterFWTrig( entity trigger, entity ent, entity caller, var value )
@@ -576,6 +711,93 @@ void function EntityLeaveFWTrig( entity trigger, entity ent, entity caller, var 
     }
 }
 
+// globlized!
+bool function FW_PlayerInFriendlyTerritory( entity player )
+{
+    foreach( entity trigger in file.fwTerritories )
+    {
+        if( trigger.GetTeam() == player.GetTeam() ) // is it friendly one?
+        {
+            if( GetAllEntitiesInTrigger( trigger ).contains( player ) ) // is player inside?
+                return true
+        }
+    }
+    return false // can't find the player
+}
+
+///////////////////////////////////
+///// TERRITORY FUNCTIONS END /////
+///////////////////////////////////
+
+
+
+////////////////////////////////
+///// TITANSPAWN FUNCTIONS /////
+////////////////////////////////
+
+// territory trigger don't have a kv.radius, let's use a const
+// 1800 will pretty much get harvester's near titan startpoints
+const float FW_SPAWNPOINT_SEARCH_RADIUS = 1800
+
+// globalized!
+vector function FW_ReCalculateTitanReplacementPoint( vector baseOrigin, int team )
+{
+    entity teamHarvester
+    // find team's harvester
+    if( team == TEAM_IMC )
+        teamHarvester = fw_harvesterImc.harvester
+    else if( team == TEAM_MILITIA )
+        teamHarvester = fw_harvesterMlt.harvester
+    else
+        unreachable // crash the game
+
+    if( Distance2D( baseOrigin, teamHarvester.GetOrigin() ) <= FW_SPAWNPOINT_SEARCH_RADIUS ) // close enough!
+        return baseOrigin // this origin is good enough
+
+    // if not close enough to base, re-calculate
+    array<entity> fortWarPoints = FW_GetTitanSpawnPointsForTeam( team )
+	entity validPoint = GetClosest( fortWarPoints, baseOrigin )
+	return validPoint.GetOrigin()
+}
+
+array<entity> function FW_GetTitanSpawnPointsForTeam( int team )
+{
+    array<entity> validSpawnPoints
+    entity teamHarvester
+    // find team's harvester
+    if( team == TEAM_IMC )
+        teamHarvester = fw_harvesterImc.harvester
+    else if( team == TEAM_MILITIA )
+        teamHarvester = fw_harvesterMlt.harvester
+    else
+        unreachable // crash the game
+
+    array<entity> allPoints
+    // same as _replacement_titans_drop.gnut does
+    allPoints.extend( GetEntArrayByClass_Expensive( "info_spawnpoint_titan" ) )
+    allPoints.extend( GetEntArrayByClass_Expensive( "info_spawnpoint_titan_start" ) )
+    allPoints.extend( GetEntArrayByClass_Expensive( "info_replacement_titan_spawn" ) )
+
+    // get valid points from all points
+    foreach( entity point in allPoints )
+    {
+        if( Distance2D( point.GetOrigin(), teamHarvester.GetOrigin() ) <= FW_SPAWNPOINT_SEARCH_RADIUS )
+            validSpawnPoints.append( point )
+    }
+
+    return validSpawnPoints
+}
+
+////////////////////////////////////
+///// TITANSPAWN FUNCTIONS END /////
+////////////////////////////////////
+
+
+
+/////////////////////////////////
+///// THREATLEVEL FUNCTIONS /////
+/////////////////////////////////
+
 void function FWAreaThreatLevelThink()
 {
     thread FWAreaThreatLevelThink_Threaded()
@@ -605,26 +827,29 @@ void function FWAreaThreatLevelThink_Threaded()
         //print( " mlt threat level is: " + string( GetGlobalNetInt( "milTowerThreatLevel" ) ) )
         float imcLastDamage = fw_harvesterImc.lastDamage
         float mltLastDamage = fw_harvesterMlt.lastDamage
+        bool imcShieldDown = fw_harvesterImc.harvesterShieldDown
+        bool mltShieldDown = fw_harvesterMlt.harvesterShieldDown
 
-        if( imcLastDamage + 5 >= Time() ) // harvester recent damaged
+        // imc threatLevel
+        if( imcLastDamage + FW_HARVESTER_DAMAGED_DEBOUNCE >= Time() && imcShieldDown )
             SetGlobalNetInt( "imcTowerThreatLevel", 3 ) // 3 will show a "harvester being damaged" warning to player
-        if( mltLastDamage + 5 >= Time() )
-            SetGlobalNetInt( "milTowerThreatLevel", 3 ) // 3 will show a "harvester being damaged" warning to player
-
-        if( warnImcTitanInArea && imcLastDamage + 5 < Time() )
+        else if( warnImcTitanInArea )
             SetGlobalNetInt( "imcTowerThreatLevel", 2 ) // 2 will show a "titan in area" warning to player
-        if( warnMltTitanInArea && imcLastDamage + 5 < Time() )
-            SetGlobalNetInt( "milTowerThreatLevel", 2 ) // 2 will show a "titan in area" warning to player
-
-        if( warnImcTitanApproach && !warnImcTitanInArea && imcLastDamage + 5 < Time() )
+        else if( warnImcTitanApproach )
             SetGlobalNetInt( "imcTowerThreatLevel", 1 ) // 1 will show a "titan approach" waning to player
-        if( warnImcTitanInArea && !warnMltTitanInArea && imcLastDamage + 5 < Time() )
-            SetGlobalNetInt( "milTowerThreatLevel", 1 ) // 1 will show a "titan approach" waning to player
-
-        if( imcLastDamage + 5 < Time() && !warnImcTitanInArea && !warnImcTitanApproach )
+        else
             SetGlobalNetInt( "imcTowerThreatLevel", 0 ) // 0 will hide all warnings
-        if( mltLastDamage + 5 < Time() && !warnMltTitanInArea && !warnMltTitanApproach )
+
+        // militia threatLevel
+        if( mltLastDamage + FW_HARVESTER_DAMAGED_DEBOUNCE >= Time() && mltShieldDown )
+            SetGlobalNetInt( "milTowerThreatLevel", 3 ) // 3 will show a "harvester being damaged" warning to player
+        else if( warnMltTitanInArea )
+            SetGlobalNetInt( "milTowerThreatLevel", 2 ) // 2 will show a "titan in area" warning to player
+        else if( warnMltTitanApproach )
+            SetGlobalNetInt( "milTowerThreatLevel", 1 ) // 1 will show a "titan approach" waning to player
+        else
             SetGlobalNetInt( "milTowerThreatLevel", 0 ) // 0 will hide all warnings
+
 
         // clean it here
         warnImcTitanInArea = false
@@ -632,9 +857,10 @@ void function FWAreaThreatLevelThink_Threaded()
         warnImcTitanApproach = false
         warnMltTitanApproach = false
 
+        // get valid titans
         array<entity> allTitans = GetNPCArrayByClass( "npc_titan" )
-        array<entity> playerTitans = GetPlayerArray()
-        foreach( entity player in playerTitans )
+        array<entity> allPlayers = GetPlayerArray()
+        foreach( entity player in allPlayers )
         {
             if( IsAlive( player ) && player.IsTitan() )
             {
@@ -642,6 +868,7 @@ void function FWAreaThreatLevelThink_Threaded()
             }
         }
 
+        // check threats
         array<entity> imcEntArray = GetAllEntitiesInTrigger( imcTerritory )
         array<entity> mltEntArray = GetAllEntitiesInTrigger( mltTerritory )
         foreach( entity ent in imcEntArray )
@@ -676,6 +903,7 @@ void function FWAreaThreatLevelThink_Threaded()
                 && titan.GetTeam() != TEAM_IMC
                 && !titan.e.isHotDropping )
                 warnImcTitanApproach = true // this titan must be in neatural space
+
             if( !mltEntArray.contains( titan )
                 && !imcEntArray.contains( titan )
                 && titan.GetTeam() != TEAM_MILITIA
@@ -687,113 +915,22 @@ void function FWAreaThreatLevelThink_Threaded()
     }
 }
 
-void function startFWHarvester()
-{
-    thread HarvesterThink(fw_harvesterMlt)
-	thread HarvesterAlarm(fw_harvesterMlt)
-    thread HarvesterThink(fw_harvesterImc)
-	thread HarvesterAlarm(fw_harvesterImc)
-    thread UpdateHarvesterHealth( TEAM_IMC )
-    thread UpdateHarvesterHealth( TEAM_MILITIA )
-}
+/////////////////////////////////////
+///// THREATLEVEL FUNCTIONS END /////
+/////////////////////////////////////
 
 
 
-void function LoadEntities()
-{
-	foreach ( entity info_target in GetEntArrayByClass_Expensive( "info_target" ) )
-	{
-		if( info_target.HasKey( "editorclass" ) )
-		{
-			switch( info_target.kv.editorclass )
-			{
-				case "info_fw_team_tower":
-                    if ( info_target.GetTeam() == TEAM_MILITIA )
-                    {
-                        //entity prop = CreatePropDynamic( info_target.GetModelName(), info_target.GetOrigin(), info_target.GetAngles(), 6 )
-					    file.harvesterMlt_info = info_target
-                        print("fw_tower tracker spawned")
-                    }
-                    if ( info_target.GetTeam() == TEAM_IMC )
-                    {
-                        //entity prop = CreatePropDynamic( info_target.GetModelName(), info_target.GetOrigin(), info_target.GetAngles(), 6 )
-					    file.harvesterImc_info = info_target
-                        print("fw_tower tracker spawned")
-                    }
-                    break
-                case "info_fw_camp":
-                    //entity prop = CreatePropDynamic( info_target.GetModelName(), info_target.GetOrigin(), info_target.GetAngles(), 6 )
-                    InitCampTracker( info_target )
-                    print("fw_camp spawned")
-                    break
-                case "info_fw_turret_site":
-                    print("info_fw_turret_siteID : " + expect string(info_target.kv.turretId) )
-                    // set this for replace function to find
-                    TurretSite turretsite
-                    turretsite.site = info_target
-                    file.turretsites.append( turretsite )
-
-                    // create turret
-                    entity turret = CreateNPC( "npc_turret_mega", info_target.GetTeam(), info_target.GetOrigin(), info_target.GetAngles() )
-                    SetSpawnOption_AISettings( turret, "npc_turret_mega_fortwar" )
-                    SetDefaultMPEnemyHighlight( turret ) // for sonar highlights to work
-                    AddEntityCallback_OnDamaged( turret, OnMegaTurretDamaged )
-                    DispatchSpawn( turret )
-                    turretsite.turret = turret
-
-                    // minimap icons
-                    entity minimapstate = CreateEntity( "prop_script" )
-                    minimapstate.SetValueForModelKey( info_target.GetModelName() )
-                    minimapstate.SetOrigin( info_target.GetOrigin() )
-                    minimapstate.SetAngles( info_target.GetAngles() )
-                    SetTeam( minimapstate, info_target.GetTeam() )
-                    minimapstate.kv.solid = SOLID_VPHYSICS
-                    DispatchSpawn( minimapstate )
-                    turret.s.minimapstate <- minimapstate
-                    break
-			}
-		}
-	}
-    foreach ( entity script_ref in GetEntArrayByClass_Expensive( "script_ref" ) )
-	{
-		if( script_ref.HasKey( "editorclass" ) )
-		{
-			switch( script_ref.kv.editorclass )
-			{
-                case "info_fw_foundation_plate":
-                    entity prop = CreatePropDynamic( script_ref.GetModelName(), script_ref.GetOrigin(), script_ref.GetAngles(), 6 )
-                    break
-                case "info_fw_battery_port":
-                    entity prop = CreatePropDynamic( script_ref.GetModelName(), script_ref.GetOrigin(), script_ref.GetAngles(), 6 )
-                    prop.kv.fadedist = 10000 // try not to fade
-                    InitTurretBatteryPort( prop )
-                    break
-			}
-		}
-	}
-    foreach ( entity trigger_multiple in GetEntArrayByClass_Expensive( "trigger_multiple" ) )
-	{
-        if( trigger_multiple.HasKey( "editorclass" ) )
-		{
-			switch( trigger_multiple.kv.editorclass )
-			{
-                case "trigger_fw_territory":
-                    SetupFWTerritoryTrigger( trigger_multiple )
-                    break
-			}
-		}
-    }
-	ValidateAndFinalizePendingStationaryPositions()
-	initNetVars()
-	//SetTeam( GetTeamEnt( TEAM_IMC ), TEAM_IMC )
-}
+////////////////////////////
+///// TURRET FUNCTIONS /////
+////////////////////////////
 
 // for battery_port, replace the turret with new one
 entity function FW_ReplaceMegaTurretFromTurretInfo( entity info_target )
 {
-    TurretSite curTurretSite
+    TurretSiteStruct curTurretSite
     // find turretSiteStruct and add it
-    foreach( TurretSite turretsite in file.turretsites )
+    foreach( TurretSiteStruct turretsite in file.turretsites )
     {
         if( turretsite.site == info_target )
             curTurretSite = turretsite
@@ -810,15 +947,13 @@ entity function FW_ReplaceMegaTurretFromTurretInfo( entity info_target )
     DispatchSpawn( turret )
 
     // apply settings to new turret, must up on date
-    turret.s.IsOrigin <- perviousTurret.s.IsOrigin
+    turret.s.baseTurret <- perviousTurret.s.baseTurret
     turret.s.minimapstate <- perviousTurret.s.minimapstate
     turret.s.turretflagid <- perviousTurret.s.turretflagid
-
-    string idString = expect string( perviousTurret.s.turretflagid )
-    SetGlobalNetEnt( "turretSite" + idString, turret )
+    turret.s.lastDamagedTime <- perviousTurret.s.lastDamagedTime
 
     // update turretSiteStruct
-    foreach( TurretSite turretsite in file.turretsites )
+    foreach( TurretSiteStruct turretsite in file.turretsites )
     {
         if( turretsite.site == info_target )
         {
@@ -834,11 +969,213 @@ entity function FW_ReplaceMegaTurretFromTurretInfo( entity info_target )
 // can only get turrets create from CreateMegaTurretFromTurretInfo()
 entity function FW_GetTurretInfoFromMegaTurret( entity turret )
 {
-    foreach( TurretSite turretsite in file.turretsites )
+    foreach( TurretSiteStruct turretsite in file.turretsites )
     {
         if( turretsite.turret == turret )
             return turretsite.site
     }
+}
+
+void function OnMegaTurretDamaged( entity turret, var damageInfo )
+{
+    int damageSourceID = DamageInfo_GetDamageSourceIdentifier( damageInfo )
+    entity attacker = DamageInfo_GetAttacker( damageInfo )
+    float damageAmount = DamageInfo_GetDamage( damageInfo )
+    int scriptType = DamageInfo_GetCustomDamageType( damageInfo )
+
+    if ( !damageSourceID && !damageAmount && !attacker )
+        return
+
+    if( turret.GetShieldHealth() - damageAmount <= 0 && scriptType != damageTypes.rodeoBatteryRemoval ) // this shot breaks shield
+    {
+        if ( !attacker.IsTitan() && !IsSuperSpectre( attacker ) )
+        {
+            if( attacker.IsPlayer() && attacker.GetTeam() != turret.GetTeam() ) // good to have
+                MessageToPlayer( attacker, eEventNotifications.TurretTitanDamageOnly )
+            DamageInfo_SetDamage( damageInfo, turret.GetShieldHealth() )
+        }
+    }
+
+    // successfully damaged turret
+    turret.s.lastDamagedTime = Time()
+
+    if ( damageSourceID == eDamageSourceId.mp_titanweapon_meteor_thermite || 
+        damageSourceID == eDamageSourceId.mp_titanweapon_flame_wall ||
+        damageSourceID == eDamageSourceId.mp_titanability_slow_trap ||
+        damageSourceID == eDamageSourceId.mp_titancore_flame_wave_secondary
+    )
+        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/2 ) // nerf scorch
+}
+
+void function InitTurretSettings()
+{
+    foreach( TurretSiteStruct turretSite in file.turretsites )
+    {
+        entity turret = turretSite.turret
+        entity minimapstate = turretSite.minimapstate
+        int teamNum = turretSite.site.GetTeam()
+        int id = int( string( turretSite.site.kv.turretId ) )
+        string idString = string( id + 1 )
+        int team = int( string( turretSite.site.kv.teamnumber ) )
+
+        int stateFlag = 1 // netural
+
+        // spawn with teamNumber?
+        if( team == TEAM_IMC || team == TEAM_MILITIA ) 
+            turret.s.baseTurret = true
+
+        SetTeam( minimapstate, team )
+        SetTeam( turret, team )
+
+        print( "Try to set globatNetEnt: " + "turretSite" + idString )   
+
+        turret.s.turretflagid = idString
+        turretSite.turretflagid = idString
+
+        thread TurretStateWatcher( turretSite )
+    }
+}
+
+// about networkvar "turretStateFlags" value
+// 1 means destoryed/netural
+// 2 means imc turret
+// 4 means mlt turret
+// 10 means shielded imc turret
+// 13 means shielded mlt turret
+// 16 means destoryed/netural being attacked
+// 18 means imc turret being attacked
+// 20 means mlt turret being attacked
+// 26 means shielded imc turret being attacked
+// 28 means shielded mlt turret being attacked
+
+// unsure:
+// 24 means destroyed imc turret being attacked?
+// 40 means destroyed imc turret?
+// 48 means destroyed mlt turret being attacked?
+
+const int TURRET_DESTROYED_FLAG = 1
+const int TURRET_NEATURAL_FLAG = 1
+const int TURRET_IMC_FLAG = 2
+const int TURRET_MLT_FLAG = 4
+const int TURRET_SHIELDED_IMC_FLAG = 10
+const int TURRET_SHIELDED_MLT_FLAG = 13
+
+const int TURRET_UNDERATTACK_NEATURAL_FLAG = 16
+const int TURRET_UNDERATTACK_IMC_FLAG = 18
+const int TURRET_UNDERATTACK_MLT_FLAG = 20
+// neatural turret noramlly can't get shield
+const int TURRET_SHIELDED_UNDERATTACK_IMC_FLAG = 26
+const int TURRET_SHIELDED_UNDERATTACK_MLT_FLAG = 28
+
+void function TurretStateWatcher( TurretSiteStruct turretSite )
+{
+    entity mapIcon = turretSite.minimapstate
+    entity turret = turretSite.turret
+
+    mapIcon.Minimap_AlwaysShow( TEAM_IMC, null )
+	mapIcon.Minimap_AlwaysShow( TEAM_MILITIA, null )
+    mapIcon.Minimap_SetCustomState( eMinimapObject_prop_script.FW_BUILDSITE_SHIELDED )
+
+    turret.SetMaxHealth( FW_DEFAULT_TURRET_HEALTH )
+    turret.SetHealth( FW_DEFAULT_TURRET_HEALTH )
+    turret.SetShieldHealthMax( FW_DEFAULT_TURRET_SHIELD )
+
+    string idString = turretSite.turretflagid
+    string siteVarName = "turretSite" + idString
+    string stateVarName = "turretStateFlags" + idString
+
+    mapIcon.EndSignal( "OnDestroy" ) // mapIcon should be valid all time, tracking it is enough
+    SetGlobalNetEnt( siteVarName, mapIcon ) // tracking mapIcon's team
+
+    while( true )
+    {
+        WaitFrame() // start of the loop
+
+        turret = turretSite.turret // need to keep updating, for sometimes it being replaced
+
+        if( !IsValid( turret ) ) // replacing turret this frame
+            continue // skip the loop once
+
+        if( !IsAlive( turret ) ) // turret down, waiting to be repaired
+        {
+            SetTeam( turret, TEAM_UNASSIGNED )
+            SetGlobalNetInt( stateVarName, TURRET_DESTROYED_FLAG )
+            continue
+        }
+        
+        int turretTeam = turret.GetTeam()
+        int iconTeam = turretTeam == TEAM_BOTH ? TEAM_UNASSIGNED : turretTeam // specific check
+        SetTeam( mapIcon, iconTeam ) // update icon's team
+
+        float lastDamagedTime = expect float( turret.s.lastDamagedTime )
+        int stateFlag = TURRET_NEATURAL_FLAG
+
+        // imc states
+        if( iconTeam == TEAM_IMC )
+        {
+            if( lastDamagedTime + FW_TURRET_DAMAGED_DEBOUNCE >= Time() ) // recent underattack
+            {
+                if( turret.GetShieldHealth() > 0 ) // has shields
+                    stateFlag = TURRET_SHIELDED_UNDERATTACK_IMC_FLAG
+                else
+                    stateFlag = TURRET_UNDERATTACK_IMC_FLAG
+            }
+            else if( turret.GetShieldHealth() > 0 ) // has shields left
+                stateFlag = TURRET_SHIELDED_IMC_FLAG
+            else
+                stateFlag = TURRET_IMC_FLAG
+        }
+
+        // mlt states
+        if( iconTeam == TEAM_MILITIA )
+        {
+            if( lastDamagedTime + FW_TURRET_DAMAGED_DEBOUNCE >= Time() ) // recent underattack
+            {
+                if( turret.GetShieldHealth() > 0 ) // has shields
+                    stateFlag = TURRET_SHIELDED_UNDERATTACK_MLT_FLAG
+                else
+                    stateFlag = TURRET_UNDERATTACK_MLT_FLAG
+            }
+            else if( turret.GetShieldHealth() > 0 ) // has shields left
+                stateFlag = TURRET_SHIELDED_MLT_FLAG
+            else
+                stateFlag = TURRET_MLT_FLAG
+        }
+        
+        // neatural states
+        if( iconTeam == TEAM_UNASSIGNED )
+        {
+            if( lastDamagedTime + FW_TURRET_DAMAGED_DEBOUNCE >= Time() ) // recent underattack
+                stateFlag = TURRET_UNDERATTACK_NEATURAL_FLAG
+            else
+                stateFlag = TURRET_NEATURAL_FLAG
+        }
+
+        SetGlobalNetInt( stateVarName, stateFlag )
+
+        WaitFrame()
+    }
+
+}
+
+////////////////////////////////
+///// TURRET FUNCTIONS END /////
+////////////////////////////////
+
+
+
+///////////////////////////////
+///// HARVESTER FUNCTIONS /////
+///////////////////////////////
+
+void function startFWHarvester()
+{
+    thread HarvesterThink(fw_harvesterMlt)
+	thread HarvesterAlarm(fw_harvesterMlt)
+    thread HarvesterThink(fw_harvesterImc)
+	thread HarvesterAlarm(fw_harvesterImc)
+    thread UpdateHarvesterHealth( TEAM_IMC )
+    thread UpdateHarvesterHealth( TEAM_MILITIA )
 }
 
 void function FW_createHarvester()
@@ -867,20 +1204,20 @@ void function FW_createHarvester()
     // don't set this, or sonar pulse will try to find it and failed to set highlight
     //fw_harvesterImc.harvester.SetScriptName("fw_team_tower")
 
-    entity trackerMlt = GetAvailableBaseLocationTracker( )
-    trackerMlt.SetOwner(fw_harvesterMlt.harvester)
+    entity trackerMlt = GetAvailableBaseLocationTracker()
+    trackerMlt.SetOwner( fw_harvesterMlt.harvester )
     DispatchSpawn( trackerMlt )
-    entity trackerImc = GetAvailableBaseLocationTracker( )
-    trackerImc.SetOwner(fw_harvesterImc.harvester)
+    entity trackerImc = GetAvailableBaseLocationTracker()
+    trackerImc.SetOwner( fw_harvesterImc.harvester )
     DispatchSpawn( trackerImc )
     SetLocationTrackerRadius( trackerMlt , 65535 ) // whole map
     SetLocationTrackerRadius( trackerImc , 65535 ) // whole map
 
-    // scores starts from 100
-    GameRules_SetTeamScore( TEAM_MILITIA , 100)
-    GameRules_SetTeamScore( TEAM_IMC , 100)
-    GameRules_SetTeamScore2( TEAM_MILITIA , 100)
-    GameRules_SetTeamScore2( TEAM_IMC , 100)
+    // scores starts from 100, TeamScore means harvester health; TeamScore2 means shield bar
+    GameRules_SetTeamScore( TEAM_MILITIA , 100 )
+    GameRules_SetTeamScore( TEAM_IMC , 100 )
+    GameRules_SetTeamScore2( TEAM_MILITIA , 100 )
+    GameRules_SetTeamScore2( TEAM_IMC , 100 )
 }
 
 void function OnHarvesterDamaged( entity harvester, var damageInfo )
@@ -894,20 +1231,22 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
     entity attacker = DamageInfo_GetAttacker( damageInfo )
     float damageAmount = DamageInfo_GetDamage( damageInfo )
 
-    if ( !damageSourceID && !damageAmount && !attacker )
+    if ( !damageSourceID && !damageAmount && !attacker ) // actually not dealing any damage?
         return
 
+    // done damage adjustments here, since harvester prop's health is setting manually through damageAmount
     if ( damageSourceID == eDamageSourceId.mp_titancore_laser_cannon )
         DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/100 ) // laser core shreds super well for some reason
 
     if ( damageSourceID == eDamageSourceId.mp_titanweapon_flightcore_rockets )
         DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/4 ) // flight core shreds super well for some reason
 
-    if ( damageSourceID == eDamageSourceId.mp_titanweapon_meteor ||
+    if ( damageSourceID == eDamageSourceId.mp_titanweapon_meteor_thermite || 
         damageSourceID == eDamageSourceId.mp_titanweapon_flame_wall ||
-        damageSourceID == eDamageSourceId.mp_titanability_slow_trap
-    )
-        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/5 ) // nerf scorch
+        damageSourceID == eDamageSourceId.mp_titanability_slow_trap ||
+        damageSourceID == eDamageSourceId.mp_titancore_flame_wave_secondary
+    ) // scorch's thermite damages
+        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/4 ) // nerf scorch
 
     HarvesterStruct harvesterstruct // current harveter's struct
     if( harvester.GetTeam() == TEAM_MILITIA )
@@ -917,12 +1256,15 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
 
     if ( harvester.GetShieldHealth() - damageAmount <= 0 ) // this shot breaks shield
     {
-        if ( !attacker.IsTitan() && attacker.IsPlayer() )
+        if ( !attacker.IsTitan() )
         {
-            Remote_CallFunction_NonReplay( attacker , "ServerCallback_FW_NotifyTitanRequired" )
-            DamageInfo_SetDamage( damageInfo, 0 )
-            return
+            if( attacker.IsPlayer() )
+                Remote_CallFunction_NonReplay( attacker , "ServerCallback_FW_NotifyTitanRequired" )
+            DamageInfo_SetDamage( damageInfo, harvester.GetShieldHealth() )
         }
+
+        damageAmount = DamageInfo_GetDamage( damageInfo ) // get damageAmount again after all damage adjustments
+
         if( !harvesterstruct.harvesterShieldDown )
         {
             PlayFactionDialogueToTeam( "fortwar_baseShieldDownFriendly", harvester.GetTeam() )
@@ -980,323 +1322,9 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
     {
         int winnerTeam = GetOtherTeam( harvester.GetTeam() )
         SetWinner( winnerTeam )
-        GameRules_SetTeamScore2( winnerTeam, 0 ) // force set score to 0
+        GameRules_SetTeamScore( winnerTeam, 0 ) // force set score to 0( health 0% )
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-//about networkvar "turretStateFlags" value
-//1 means destoryed/netural
-//2 means imc turret
-//4 means mlt turret
-//10 means shielded imc turret
-//13 means shielded mlt turret
-//16 means destoryed/netural being attacked
-//18 means imc turret being attacked
-//20 means mlt turret being attacked
-//26 means shielded imc turret being attacked
-//28 means shielded mlt turret being attacked
-
-
-
-//24 means destroyed imc turret being attacked?
-//40 means destroyed imc turret?
-//48 means destroyed mlt turret being attacked?
-void function OnMegaTurretDamaged( entity turret, var damageInfo )
-{
-    int damageSourceID = DamageInfo_GetDamageSourceIdentifier( damageInfo )
-    entity attacker = DamageInfo_GetAttacker( damageInfo )
-    float damageAmount = DamageInfo_GetDamage( damageInfo )
-    int scriptType = DamageInfo_GetCustomDamageType( damageInfo )
-
-    if( turret.GetShieldHealth() - damageAmount <= 0 && scriptType != damageTypes.rodeoBatteryRemoval ) // shield down
-    {
-        if ( !attacker.IsTitan() && attacker.IsPlayer() )
-        {
-            if( attacker.GetTeam() != turret.GetTeam() ) // good to have
-                MessageToPlayer( attacker, eEventNotifications.TurretTitanDamageOnly )
-            DamageInfo_SetDamage( damageInfo, 0 )
-            return
-        }
-    }
-    if ( damageSourceID == eDamageSourceId.mp_titanweapon_meteor ||
-        damageSourceID == eDamageSourceId.mp_titanweapon_flame_wall ||
-        damageSourceID == eDamageSourceId.mp_titanability_slow_trap
-    )
-        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/2 ) // nerf scorch
-    if( turret.GetHealth() <= DamageInfo_GetDamage( damageInfo ) ) // killshot
-    {
-        string flag = expect string( turret.s.turretflagid )
-        SetGlobalNetInt( "turretStateFlags" + flag, 1 ) // set turretSite to grey until it gets fixed
-        SetTeam( turret, TEAM_UNASSIGNED ) // don't let anything target it
-        return // don't trigger icon changes
-    }
-
-    TurretFlagDamageCallback( turret, damageInfo ) // this will affect turret's icons
-}
-
-void function TurretFlagDamageCallback( entity turret, var damageInfo )
-{
-    if ( !IsValid( turret ) )
-        return
-    float damage = DamageInfo_GetDamage( damageInfo )
-    bool isorigin = expect bool( turret.s.IsOrigin )
-    thread TurretFlagOnDamage_threaded( turret , damage )
-}
-
-void function TurretFlagOnDamage_threaded( entity turret , float damage )
-{
-    turret.Signal( "FlashTurretFlag" )
-    turret.EndSignal( "FlashTurretFlag" ) // save for continously damages
-    turret.EndSignal( "OnDeath" ) // end the function for deaths
-    string flag = expect string( turret.s.turretflagid )
-    OnThreadEnd(
-        function() : ( turret, damage ,flag )
-            {
-                if ( !IsAlive( turret ) )
-                {
-                    SetGlobalNetInt( "turretStateFlags" + flag, 1 )
-                    if ( turret.GetTeam() == 4 )
-                        SetTeam( turret , 1 ) //make netural
-                }
-            }
-        )
-    if ( turret.GetShieldHealth() - damage > 0 )
-    {
-        if ( turret.GetTeam() == TEAM_IMC )
-        {
-            SetGlobalNetInt( "turretStateFlags" + flag, 26 )
-            wait 2
-            SetGlobalNetInt( "turretStateFlags" + flag, 10 )
-            return
-        }
-        if( turret.GetTeam() == TEAM_MILITIA )
-        {
-            SetGlobalNetInt( "turretStateFlags" + flag, 28 )
-            wait 2
-            SetGlobalNetInt( "turretStateFlags" + flag, 13 )
-            return
-        }
-    }
-    else
-    {
-        if ( turret.GetTeam() == TEAM_IMC )
-        {
-            SetGlobalNetInt( "turretStateFlags" + flag, 18 )
-            wait 2
-            SetGlobalNetInt( "turretStateFlags" + flag, 2 )
-            return
-        }
-        if( turret.GetTeam() == TEAM_MILITIA )
-        {
-            SetGlobalNetInt( "turretStateFlags" + flag, 20 )
-            wait 2
-            SetGlobalNetInt( "turretStateFlags" + flag, 4 )
-            return
-        }
-        else
-        {
-            SetGlobalNetInt( "turretStateFlags" + flag, 16 )
-            wait 2
-            SetGlobalNetInt( "turretStateFlags" + flag, 1 )
-            return
-        }
-    }
-}
-
-
-void function initNetVars()
-{
-    foreach( turret in file.turretsites )
-    {
-        int id = int( string( turret.site.kv.turretId ) )
-        string idString = string( id + 1 )
-        int team = turret.turret.GetTeam()
-        int stateFlag = 1 // netural
-        turret.turret.s.IsOrigin <- false
-        if( team == TEAM_IMC ) // spawn with teamNumber?
-        {
-            stateFlag = 2 //
-            turret.turret.s.IsOrigin = true
-        }
-        if( team == TEAM_MILITIA )
-        {
-            stateFlag = 4
-            turret.turret.s.IsOrigin = true
-        }
-
-        print( "Try to set globatNetEnt: " + "turretSite" + idString )
-        SetGlobalNetEnt( "turretSite" + idString, turret.turret )
-        SetGlobalNetInt( "turretStateFlags" + idString, stateFlag )
-        turret.turret.s.turretflagid <- idString
-        TurretSiteWatcher( turret )
-    }
-
-    // camps don't have a id, set them manually
-    foreach( int index, CampSiteStruct camp in file.fwCampSites )
-    {
-        if ( index == 0 )
-        {
-            camp.campId = "A"
-            SetGlobalNetInt( "fwCampAlertA", 0 )
-            SetGlobalNetInt( "fwCampStressA", 1 )
-            // can't use float rn
-            //SetGlobalNetFloat( "fwCampStressA", 1.0 )
-            SetLocationTrackerID( camp.tracker, 0 )
-            file.trackedCampNPCSpawns["A"] <- {}
-            continue
-        }
-        if ( index == 1 )
-        {
-            camp.campId = "B"
-            SetGlobalNetInt( "fwCampAlertB", 0 )
-            SetGlobalNetInt( "fwCampStressB", 1 )
-            // can't use float rn
-            //SetGlobalNetFloat( "fwCampStressB", 1.0 )
-            SetLocationTrackerID( camp.tracker, 1 )
-            file.trackedCampNPCSpawns["B"] <- {}
-            continue
-        }
-        if ( index == 2 )
-        {
-            camp.campId = "C"
-            SetGlobalNetInt( "fwCampAlertC", 0 )
-            SetGlobalNetInt( "fwCampStressC", 1 )
-            // can't use float rn
-            //SetGlobalNetFloat( "fwCampStressC", 1.0 )
-            SetLocationTrackerID( camp.tracker, 2 )
-            file.trackedCampNPCSpawns["C"] <- {}
-            continue
-        }
-    }
-
-}
-
-void function TurretSiteWatcher( TurretSite turret )
-{
-    //expect entity(turret.turret.s.minimapstate)
-    //entity megaturret = turret.turret.s.minimapstate
-    entity megaturret = expect entity( turret.turret.s.minimapstate )
-    if ( turret.turret.GetTeam() == TEAM_MILITIA || turret.turret.GetTeam() == TEAM_IMC )
-    {
-	    megaturret.Minimap_AlwaysShow( TEAM_IMC, null )
-	    megaturret.Minimap_AlwaysShow( TEAM_MILITIA, null )
-        megaturret.Minimap_SetCustomState( eMinimapObject_prop_script.FW_BUILDSITE_SHIELDED )
-    }
-    else
-    {
-        SetTeam( megaturret, 1 )
-	    megaturret.Minimap_AlwaysShow( TEAM_IMC, null )
-	    megaturret.Minimap_AlwaysShow( TEAM_MILITIA, null )
-        megaturret.Minimap_SetCustomState( eMinimapObject_prop_script.FW_BUILDSITE_SHIELDED )
-    }
-    turret.turret.SetMaxHealth( FW_DEFAULT_TURRET_HEALTH )
-    turret.turret.SetHealth( FW_DEFAULT_TURRET_HEALTH )
-    turret.turret.SetShieldHealthMax( FW_DEFAULT_TURRET_SHIELD )
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 void function HarvesterThink( HarvesterStruct fd_harvester )
 {
@@ -1422,8 +1450,12 @@ void function UpdateHarvesterHealth( int team )
         {
             int winnerTeam = GetOtherTeam(team)
             SetWinner( winnerTeam )
-            GameRules_SetTeamScore2( winnerTeam, 0 ) // force set score to 0
+            GameRules_SetTeamScore2( winnerTeam, 0 ) // force set score2 to 0( shield bar will empty )
             break
         }
     }
 }
+
+///////////////////////////////////
+///// HARVESTER FUNCTIONS END /////
+///////////////////////////////////
