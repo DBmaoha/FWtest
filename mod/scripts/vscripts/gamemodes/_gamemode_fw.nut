@@ -25,8 +25,8 @@ const int FW_SPECTRE_COUNT = 24
 const int FW_REAPER_COUNT = 2
 
 // max deployment each camp
-const int FW_GRUNT_MAX_DEPLOYED = 8 
-const int FW_SPECTRE_MAX_DEPLOYED = 8 
+const int FW_GRUNT_MAX_DEPLOYED = 8
+const int FW_SPECTRE_MAX_DEPLOYED = 8
 const int FW_REAPER_MAX_DEPLOYED = 1
 
 // if other camps been cleaned many times, we levelDown
@@ -217,7 +217,7 @@ void function InitCampTracker( entity camp )
     foreach ( entity spawnpoint in SpawnPoints_GetDropPod() )
         if ( Distance( camp.GetOrigin(), spawnpoint.GetOrigin() ) < radius )
             campsite.validDropPodSpawns.append( spawnpoint )
-    
+
     // get titan spawns
     foreach ( entity spawnpoint in SpawnPoints_GetTitan() )
         if ( Distance( camp.GetOrigin(), spawnpoint.GetOrigin() ) < radius )
@@ -250,12 +250,12 @@ void function FWAiCampThink( CampSiteStruct campsite )
         if( campsite.ignoredSinceLastClean >= FW_IGNORE_NEEDED && alertLevel > 1 ) // has been ignored many times, level > 1
         {
             // reset level
-            alertLevel = 0 
+            alertLevel = 0
             SetGlobalNetInt( alertVarName, 0 )
         }
 
         // under attack, clean this
-        campsite.ignoredSinceLastClean = 0 
+        campsite.ignoredSinceLastClean = 0
 
         CampSpawnStruct curSpawnStruct = file.fwNpcLevel[alertLevel]
         string npcToSpawn = curSpawnStruct.spawnContent
@@ -267,7 +267,7 @@ void function FWAiCampThink( CampSiteStruct campsite )
         file.trackedCampNPCSpawns[campId] = {}
         int killsNeeded = killsToEscalate
         int lastNpcLeft
-        while( true ) 
+        while( true )
         {
             WaitFrame()
 
@@ -347,11 +347,11 @@ void function FW_SpawnDroppodSquad( CampSiteStruct campsite, string aiType )
 		spawnpoint = campsite.tracker // no spawnPoints valid, use camp itself to spawn
 	else
 		spawnpoint = campsite.validDropPodSpawns.getrandom()
-	
+
 	// add variation to spawns
 	wait RandomFloat( 1.0 )
-	
-	AiGameModes_SpawnDropPod( spawnpoint.GetOrigin(), spawnpoint.GetAngles(), FW_AI_TEAM, aiType, void function( array<entity> guys ) : ( campsite, aiType ) 
+
+	AiGameModes_SpawnDropPod( spawnpoint.GetOrigin(), spawnpoint.GetAngles(), FW_AI_TEAM, aiType, void function( array<entity> guys ) : ( campsite, aiType )
 	{
 		FW_HandleSquadSpawn( guys, campsite, aiType )
 	})
@@ -384,14 +384,14 @@ void function FW_SpawnReaper( CampSiteStruct campsite )
 
 	// add variation to spawns
 	wait RandomFloat( 1.0 )
-	
-	AiGameModes_SpawnReaper( spawnpoint.GetOrigin(), spawnpoint.GetAngles(), FW_AI_TEAM, "npc_super_spectre_aitdm",void function( entity reaper ) : ( campsite ) 
+
+	AiGameModes_SpawnReaper( spawnpoint.GetOrigin(), spawnpoint.GetAngles(), FW_AI_TEAM, "npc_super_spectre_aitdm",void function( entity reaper ) : ( campsite )
 	{
         reaper.SetScriptName( FW_NPC_SCRIPTNAME ) // no neet rn
         // show on minimap to let players kill them
         reaper.Minimap_AlwaysShow( TEAM_MILITIA, null )
         reaper.Minimap_AlwaysShow( TEAM_IMC, null )
-        
+
         // at least don't let them running around
         thread FW_ForceAssaultInCamp( [reaper], campsite.camp )
 		// untrack them on death
@@ -482,7 +482,7 @@ vector function FW_ReCalculateTitanReplacementPoint( vector baseOrigin, int team
 
     if( Distance2D( baseOrigin, teamHarvester.GetOrigin() ) <= FW_SPAWNPOINT_SEARCH_RADIUS ) // close enough!
         return baseOrigin // this origin is good enough
-    
+
     // if not close enough to base, re-calculate
     array<entity> fortWarPoints = FW_GetTitanSpawnPointsForTeam( team )
 	entity validPoint = GetClosest( fortWarPoints, baseOrigin )
@@ -500,7 +500,7 @@ array<entity> function FW_GetTitanSpawnPointsForTeam( int team )
         teamHarvester = fw_harvesterMlt.harvester
     else
         unreachable // crash the game
-    
+
     array<entity> allPoints
     // same as _replacement_titans_drop.gnut does
     allPoints.extend( GetEntArrayByClass_Expensive( "info_spawnpoint_titan" ) )
@@ -664,13 +664,13 @@ void function FWAreaThreatLevelThink_Threaded()
 
         foreach( entity titan in allTitans )
         {
-            if( !imcEntArray.contains( titan ) 
-                && !mltEntArray.contains( titan ) 
+            if( !imcEntArray.contains( titan )
+                && !mltEntArray.contains( titan )
                 && titan.GetTeam() != TEAM_IMC
                 && !titan.e.isHotDropping )
                 warnImcTitanApproach = true // this titan must be in neatural space
-            if( !mltEntArray.contains( titan ) 
-                && !imcEntArray.contains( titan ) 
+            if( !mltEntArray.contains( titan )
+                && !imcEntArray.contains( titan )
                 && titan.GetTeam() != TEAM_MILITIA
                 && !titan.e.isHotDropping )
                 warnMltTitanApproach = true // this titan must be in neatural space
@@ -724,7 +724,7 @@ void function LoadEntities()
                     // set this for replace function to find
                     TurretSite turretsite
                     turretsite.site = info_target
-                    file.turretsites.append( turretsite ) 
+                    file.turretsites.append( turretsite )
 
                     // create turret
                     entity turret = CreateNPC( "npc_turret_mega", info_target.GetTeam(), info_target.GetOrigin(), info_target.GetAngles() )
@@ -815,9 +815,9 @@ entity function FW_ReplaceMegaTurretFromTurretInfo( entity info_target )
             turretsite.turret = turret // only changed this
         }
     }
-    
+
     perviousTurret.Destroy() // destroy previous one
-    
+
     return turret
 }
 
@@ -974,6 +974,72 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
     }
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//about networkvar "turretStateFlags" value
+//1 means destoryed/netural
+//2 means imc turret
+//4 means mlt turret
+//10 means shielded imc turret
+//13 means shielded mlt turret
+//16 means destoryed/netural being attacked
+//18 means imc turret being attacked
+//20 means mlt turret being attacked
+//26 means shielded imc turret being attacked
+//28 means shielded mlt turret being attacked
+
+
+
+//24 means destroyed imc turret being attacked?
+//40 means destroyed imc turret?
+//48 means destroyed mlt turret being attacked?
 void function OnMegaTurretDamaged( entity turret, var damageInfo )
 {
     int damageSourceID = DamageInfo_GetDamageSourceIdentifier( damageInfo )
@@ -1010,65 +1076,70 @@ void function TurretFlagDamageCallback( entity turret, var damageInfo )
 {
     if ( !IsValid( turret ) )
         return
+    float damage = DamageInfo_GetDamage( damageInfo )
     bool isorigin = expect bool( turret.s.IsOrigin )
-    if ( isorigin )
-    {
-        thread TurretFlagOnDamage_threaded( turret )
-        return
-    }
-    thread NeturalTurretFlagOnDamage_threaded( turret )
+    thread TurretFlagOnDamage_threaded( turret , damage )
 }
 
-void function TurretFlagOnDamage_threaded( entity turret )
+void function TurretFlagOnDamage_threaded( entity turret , float damage )
 {
     turret.Signal( "FlashTurretFlag" )
     turret.EndSignal( "FlashTurretFlag" ) // save for continously damages
     turret.EndSignal( "OnDeath" ) // end the function for deaths
     string flag = expect string( turret.s.turretflagid )
-    if ( turret.GetTeam() == TEAM_IMC )
+    OnThreadEnd(
+        function() : ( turret, damage ,flag )
+            {
+                if ( !IsAlive( turret ) && turret.GetTeam() == 4 )
+                {
+                    SetTeam( turret , 1 ) //make netural
+                }
+                SetGlobalNetInt( "turretStateFlags" + flag, 1 )
+            }
+        )
+    if ( turret.GetShieldHealth() - damage > 0 )
     {
-        SetGlobalNetInt( "turretStateFlags" + flag, 26 )
-        wait 2
-        SetGlobalNetInt( "turretStateFlags" + flag, 10 )
-        return
+        if ( turret.GetTeam() == TEAM_IMC )
+        {
+            SetGlobalNetInt( "turretStateFlags" + flag, 26 )
+            wait 2
+            SetGlobalNetInt( "turretStateFlags" + flag, 10 )
+            return
+        }
+        if( turret.GetTeam() == TEAM_MILITIA )
+        {
+            SetGlobalNetInt( "turretStateFlags" + flag, 28 )
+            wait 2
+            SetGlobalNetInt( "turretStateFlags" + flag, 13 )
+            return
+        }
     }
-    if( turret.GetTeam() == TEAM_MILITIA )
+    else
     {
-        SetGlobalNetInt( "turretStateFlags" + flag, 28 )
-        wait 2
-        SetGlobalNetInt( "turretStateFlags" + flag, 13 )
-        return
+        if ( turret.GetTeam() == TEAM_IMC )
+        {
+            SetGlobalNetInt( "turretStateFlags" + flag, 18 )
+            wait 2
+            SetGlobalNetInt( "turretStateFlags" + flag, 2 )
+            return
+        }
+        if( turret.GetTeam() == TEAM_MILITIA )
+        {
+            SetGlobalNetInt( "turretStateFlags" + flag, 20 )
+            wait 2
+            SetGlobalNetInt( "turretStateFlags" + flag, 4 )
+            return
+        }
+        else
+        {
+            SetGlobalNetInt( "turretStateFlags" + flag, 16 )
+            wait 2
+            SetGlobalNetInt( "turretStateFlags" + flag, 1 )
+            return
+        }
     }
 }
 
-void function NeturalTurretFlagOnDamage_threaded( entity turret )
-{
-    turret.Signal( "FlashTurretFlag" )
-    turret.EndSignal( "FlashTurretFlag" ) // save for continously damages
-    turret.EndSignal( "OnDeath" ) // end the function for deaths
-    string flag = expect string( turret.s.turretflagid )
-    if ( turret.GetTeam() == TEAM_IMC )
-    {
-        SetGlobalNetInt( "turretStateFlags" + flag, 18 )
-        wait 2
-        SetGlobalNetInt( "turretStateFlags" + flag, 2 )
-        return
-    }
-    if( turret.GetTeam() == TEAM_MILITIA )
-    {
-        SetGlobalNetInt( "turretStateFlags" + flag, 21 )
-        wait 2
-        SetGlobalNetInt( "turretStateFlags" + flag, 4 )
-        return
-    }
-    if ( GetGlobalNetInt( "turretStateFlags" + flag ) != 16 )
-    {
-        SetGlobalNetInt( "turretStateFlags" + flag, 16 )
-        wait 2
-        SetGlobalNetInt( "turretStateFlags" + flag, 1 )
-        return
-    }
-}
 
 void function initNetVars()
 {
@@ -1081,12 +1152,12 @@ void function initNetVars()
         turret.turret.s.IsOrigin <- false
         if( team == TEAM_IMC )
         {
-            stateFlag = 10 // 10 means origin TEAM_IMC turret
+            stateFlag = 2 //
             turret.turret.s.IsOrigin = true
         }
         if( team == TEAM_MILITIA )
         {
-            stateFlag = 13 // 13 means origin TEAM_MILITIA turret
+            stateFlag = 4
             turret.turret.s.IsOrigin = true
         }
 
@@ -1158,6 +1229,61 @@ void function TurretSiteWatcher( TurretSite turret )
     turret.turret.SetHealth( 20000 )
     turret.turret.SetShieldHealthMax( 10000 )
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 void function HarvesterThink( HarvesterStruct fd_harvester )
 {
