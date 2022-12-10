@@ -1090,11 +1090,12 @@ void function TurretFlagOnDamage_threaded( entity turret , float damage )
     OnThreadEnd(
         function() : ( turret, damage ,flag )
             {
-                if ( !IsAlive( turret ) && turret.GetTeam() == 4 )
+                if ( !IsAlive( turret ) )
                 {
-                    SetTeam( turret , 1 ) //make netural
+                    SetGlobalNetInt( "turretStateFlags" + flag, 1 )
+                    if ( turret.GetTeam() == 4 )
+                        SetTeam( turret , 1 ) //make netural
                 }
-                SetGlobalNetInt( "turretStateFlags" + flag, 1 )
             }
         )
     if ( turret.GetShieldHealth() - damage > 0 )
