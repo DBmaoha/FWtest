@@ -1,7 +1,18 @@
 untyped
 global function GamemodeFW_Init
 global function RateSpawnpoints_FW
-//global function SetupFWTerritoryTrigger
+
+// i don't know how to use playlists in keyvalues folder, let's change maps manually
+const array<string> FW_ALLOWED_MAPS =
+[
+    "mp_forwardbase_kodai",
+    "mp_grave",
+    "mp_homestead",
+    "mp_thaw",
+    "mp_eden",
+    "mp_crashsite3",
+    "mp_complex3"
+]
 
 // for battery_port.gnut to work
 global function FW_ReplaceMegaTurretFromTurretInfo
@@ -64,6 +75,7 @@ struct CampSiteStruct
     array<entity> validDropPodSpawns
     array<entity> validTitanSpawns
     string campId // "A", "B", "C"
+    int npcsAlive
     int ignoredSinceLastClean
 }
 
@@ -106,16 +118,43 @@ void function GamemodeFW_Init()
     AddCallback_GameStateEnter( eGameState.Prematch, OnFWGamePrematch )
     AddCallback_GameStateEnter( eGameState.Playing, OnFWGamePlaying )
 
+    AddSpawnCallback( "item_powerup", FWAddPowerUpIcon )
+
     ScoreEvent_SetupEarnMeterValuesForMixedModes()
 
     ClassicMP_ForceDisableEpilogue( true ) // temp
 
-    RegisterSignal( "FlashTurretFlag" )
-    // need to be in LoadEntities(), before harvester creation
-    //AddSpawnCallbackEditorClass( "trigger_multiple", "trigger_fw_territory", SetupFWTerritoryTrigger )
-    // noneed to use it rn
-    //AddSpawnCallbackEditorClass( "info_target", "info_fw_camp", InitCampTracker )
+    // temp, force change maps
+    AddCallback_GameStateEnter( eGameState.Postmatch, FWForceChangeMap )
 }
+
+//////////////////////////
+///// TEMP FUNCTIONS /////
+//////////////////////////
+
+void function FWForceChangeMap()
+{
+    thread FWForceChangeMap_Threaded()
+}
+
+void function FWForceChangeMap_Threaded()
+{
+    wait 5
+
+    string mapName = GetMapName()
+    int curMapIdx = FW_ALLOWED_MAPS.find( mapName )
+
+    int nextMapIdx = curMapIdx + 1
+    if( nextMapIdx + 1 >= FW_ALLOWED_MAPS.len() ) // last map
+        nextMapIdx = 0
+
+    GameRules_ChangeMap( FW_ALLOWED_MAPS[ nextMapIdx ], "fw" )
+}
+
+//////////////////////////////
+///// TEMP FUNCTIONS END /////
+//////////////////////////////
+
 
 
 ////////////////////////////////
@@ -377,6 +416,25 @@ void function InitCampSpawnerLevel() // can edit this to make more spawns, alert
 ////////////////////////////////////
 ///// INITIALIZE FUNCTIONS END /////
 ////////////////////////////////////
+
+
+
+/////////////////////////////
+///// POWERUP FUNCTIONS /////
+/////////////////////////////
+
+void function FWAddPowerUpIcon( entity powerup )
+{
+    powerup.Minimap_SetAlignUpright( true )
+	powerup.Minimap_SetZOrder( MINIMAP_Z_OBJECT )
+    powerup.Minimap_SetClampToEdge( false )
+    powerup.Minimap_AlwaysShow( TEAM_MILITIA, null )
+    powerup.Minimap_AlwaysShow( TEAM_IMC, null )
+}
+
+/////////////////////////////////
+///// POWERUP FUNCTIONS END /////
+/////////////////////////////////
 
 
 
@@ -1135,9 +1193,12 @@ void function TurretStateWatcher( TurretSiteStruct turretSite )
         if( !IsValid( turret ) ) // replacing turret this frame
             continue // skip the loop once
 
+        bool isBaseTurret = expect bool( turret.s.baseTurret )
+
         if( !IsAlive( turret ) ) // turret down, waiting to be repaired
         {
-            SetTeam( turret, TEAM_UNASSIGNED )
+            if( !isBaseTurret ) // never reset base turret's team
+                SetTeam( turret, TEAM_UNASSIGNED )
             SetGlobalNetInt( stateVarName, TURRET_DESTROYED_FLAG )
             continue
         }
