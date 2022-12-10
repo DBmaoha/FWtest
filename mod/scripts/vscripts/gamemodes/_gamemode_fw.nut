@@ -116,21 +116,36 @@ void function GamemodeFW_Init()
     AddCallback_EntitiesDidLoad( LoadEntities )
     AddCallback_GameStateEnter( eGameState.Prematch, OnFWGamePrematch )
     AddCallback_GameStateEnter( eGameState.Playing, OnFWGamePlaying )
+    AddCallback_GameStateEnter( eGameState.Postmatch, OnFWGamePostmatch )
 
     AddSpawnCallback( "item_powerup", FWAddPowerUpIcon )
 
     ScoreEvent_SetupEarnMeterValuesForMixedModes()
 
     ClassicMP_ForceDisableEpilogue( true ) // temp
-
-    // temp, force change maps
-    AddCallback_GameStateEnter( eGameState.Postmatch, FWForceChangeMap )
 }
 
 //////////////////////////
 ///// TEMP FUNCTIONS /////
 //////////////////////////
 
+// temp, in some maps( complex, grave ) npcs being cleaned up will fire outside of the map and crash the server
+void function FWForceCleanUp()
+{
+    foreach( entity player in GetPlayerArray() )
+    {
+        player.ClearParent() // so npcs won't have a player parented
+    }
+
+    foreach( entity npc in GetNPCArray() )
+    {
+        // this might able to get npcs cleaned safely
+        npc.ClearParent()
+        npc.Destroy()
+    }
+}
+
+// temp, force change maps, since i don't know how to use a playlist
 void function FWForceChangeMap()
 {
     thread FWForceChangeMap_Threaded()
@@ -223,6 +238,12 @@ void function OnFWGamePlaying()
     FWAreaThreatLevelThink()
     StartFWCampThink()
     InitTurretSettings()
+}
+
+void function OnFWGamePostmatch()
+{
+    FWForceCleanUp()
+    FWForceChangeMap()
 }
 
 //////////////////////////////////
