@@ -247,25 +247,25 @@ void function LoadEntities()
                     {
                         //entity prop = CreatePropDynamic( info_target.GetModelName(), info_target.GetOrigin(), info_target.GetAngles(), 6 )
 					    file.harvesterMlt_info = info_target
-                        print("fw_tower tracker spawned")
+                        //print("fw_tower tracker spawned")
                     }
                     if ( info_target.GetTeam() == TEAM_IMC )
                     {
                         //entity prop = CreatePropDynamic( info_target.GetModelName(), info_target.GetOrigin(), info_target.GetAngles(), 6 )
 					    file.harvesterImc_info = info_target
-                        print("fw_tower tracker spawned")
+                        //print("fw_tower tracker spawned")
                     }
                     break
                 case "info_fw_camp":
                     //entity prop = CreatePropDynamic( info_target.GetModelName(), info_target.GetOrigin(), info_target.GetAngles(), 6 )
                     InitCampTracker( info_target )
-                    print("fw_camp spawned")
+                    //print("fw_camp spawned")
                     break
                 case "info_fw_turret_site":
 
                     string idString = expect string(info_target.kv.turretId)
                     int id = int( info_target.kv.turretId )
-                    print("info_fw_turret_siteID : " + idString )
+                    //print("info_fw_turret_siteID : " + idString )
 
                     // set this for replace function to find
                     TurretSiteStruct turretsite
@@ -427,7 +427,7 @@ void function InitFWCampSites()
 
 void function InitCampTracker( entity camp )
 {
-    print("InitCampTracker")
+    //print("InitCampTracker")
     CampSiteStruct campsite
     campsite.camp = camp
     file.fwCampSites.append( campsite )
@@ -685,7 +685,7 @@ void function SetupFWTerritoryTrigger( entity trigger )
                 break
 		}
     }*/
-    print("trigger_fw_territory detected")
+    //print("trigger_fw_territory detected")
     file.fwTerritories.append( trigger )
     trigger.ConnectOutput( "OnStartTouch", EntityEnterFWTrig )
 	trigger.ConnectOutput( "OnEndTouch", EntityLeaveFWTrig )
@@ -1065,7 +1065,7 @@ void function InitTurretSettings()
         SetTeam( minimapstate, team )
         SetTeam( turret, team )
 
-        print( "Try to set globatNetEnt: " + "turretSite" + idString )   
+        //print( "Try to set globatNetEnt: " + "turretSite" + idString )   
 
         turret.s.turretflagid = idString
         turretSite.turretflagid = idString
@@ -1297,15 +1297,15 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
 
     if ( harvester.GetShieldHealth() - damageAmount <= 0 ) // this shot breaks shield
     {
+        damageAmount = DamageInfo_GetDamage( damageInfo ) // get damageAmount again after all damage adjustments
+
         if ( !attacker.IsTitan() )
         {
             if( attacker.IsPlayer() )
                 Remote_CallFunction_NonReplay( attacker , "ServerCallback_FW_NotifyTitanRequired" )
             DamageInfo_SetDamage( damageInfo, harvester.GetShieldHealth() )
+            damageAmount = 0 // never damages haveter's prop
         }
-
-        damageAmount = DamageInfo_GetDamage( damageInfo ) // get damageAmount again after all damage adjustments
-
         if( !harvesterstruct.harvesterShieldDown )
         {
             PlayFactionDialogueToTeam( "fortwar_baseShieldDownFriendly", harvester.GetTeam() )
