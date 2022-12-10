@@ -56,13 +56,26 @@ void function TrackTurretLifeTime( entity batteryPort, entity turret )
     batteryPort.EndSignal( "OnDestroy" )
     turret.EndSignal( "OnDestroy" )
 
-    turret.WaitSignal( "OnDeath" )
-    entity battery = expect entity( batteryPort.s.batteryPackInside )
-    if( IsValid( battery ) ) // clear battery inside turret, wait for players recharge it
+    while( true )
     {
-        battery.Destroy()
-        batteryPort.s.batteryPackInside = null
+        WaitFrame()
+        if( turret.GetShieldHealth() == 0 ) // no shield mooooooooooo
+            TryCleanUpBatteryInBatteryPort( batteryPort )
     }
+}
+
+void function TryCleanUpBatteryInBatteryPort( entity batteryPort )
+{
+    entity battery = expect entity( batteryPort.s.batteryPackInside )
+    if( !IsValid( battery ) ) // already cleaned
+    {
+        batteryPort.s.batteryPackInside = null
+        return
+    }
+
+    battery.ClearParent()
+    battery.Destroy()
+    batteryPort.s.batteryPackInside = null
 }
 
 function OnUseTurretBatteryPort( entBeingUse, user )
@@ -103,7 +116,7 @@ void function TryUseTurretBatteryPort( entity player, entity batteryPort )
         // enemy try to remove it
         waitthread PlayerRemoveBatteryPackFromPort( player, batteryPort )
     }
-    else if( PlayerHasBattery( player ) && sameTeam ) // player has a battery
+    else if( !IsValid( batteryPort.s.batteryPackInside ) && PlayerHasBattery( player ) && sameTeam ) // player has a battery
     {
         // friendly try to apply one
         waitthread PlayerApplesBatteryPackToPort( player, batteryPort )
@@ -335,8 +348,7 @@ void function RemoveBatteryFromPort( entity player, entity batteryPort )
     if( !IsValid( battery ) )
         return
     // destroy the battery, don't give it to any players
-    battery.ClearParent()
-    battery.Destroy()
+    TryCleanUpBatteryInBatteryPort( batteryPort )
 
     entity turret = expect entity( batteryPort.s.relatedTurret )
     if( !IsAlive( turret ) ) // turret has been destroyed!
