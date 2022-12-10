@@ -15,8 +15,7 @@ const array<string> FW_ALLOWED_MAPS =
 ]
 
 // for battery_port.gnut to work
-global function FW_ReplaceMegaTurretFromTurretInfo
-global function FW_GetTurretInfoFromMegaTurret
+global function FW_ReplaceMegaTurret
 
 // fw specific titanfalls
 global function FW_PlayerInFriendlyTerritory
@@ -145,7 +144,7 @@ void function FWForceChangeMap_Threaded()
     int curMapIdx = FW_ALLOWED_MAPS.find( mapName )
 
     int nextMapIdx = curMapIdx + 1
-    if( nextMapIdx + 1 >= FW_ALLOWED_MAPS.len() ) // last map
+    if( nextMapIdx + 1 > FW_ALLOWED_MAPS.len() ) // last map
         nextMapIdx = 0
 
     GameRules_ChangeMap( FW_ALLOWED_MAPS[ nextMapIdx ], "fw" )
@@ -326,19 +325,20 @@ void function LoadEntities()
                     turret.s.baseTurret <- false                // bool, is this turret from base
                     turret.s.turretflagid <- ""                 // string, turret's id like "1", "2", "3"
                     turret.s.lastDamagedTime <- 0.0             // float, for showing turret underattack icons
+                    turret.s.relatedBatteryPort <- null         // entity, corssfile
 
                     // minimap icons
                     entity minimapstate = CreateEntity( "prop_script" )
                     minimapstate.SetValueForModelKey( info_target.GetModelName() )
                     minimapstate.SetOrigin( info_target.GetOrigin() )
                     minimapstate.SetAngles( info_target.GetAngles() )
-                    SetTeam( minimapstate, info_target.GetTeam() )
+                    //SetTeam( minimapstate, info_target.GetTeam() ) // setTeam() for icons is done in TurretStateWatcher()
                     minimapstate.kv.solid = SOLID_VPHYSICS
                     DispatchSpawn( minimapstate )
 
                     turretsite.minimapstate = minimapstate
                     turret.s.minimapstate = minimapstate
-
+                    
                     break
 			}
 		}
@@ -1022,21 +1022,12 @@ void function FWAreaThreatLevelThink_Threaded()
 ////////////////////////////
 
 // for battery_port, replace the turret with new one
-entity function FW_ReplaceMegaTurretFromTurretInfo( entity info_target )
+entity function FW_ReplaceMegaTurret( entity perviousTurret )
 {
-    TurretSiteStruct curTurretSite
-    // find turretSiteStruct and add it
-    foreach( TurretSiteStruct turretsite in file.turretsites )
-    {
-        if( turretsite.site == info_target )
-            curTurretSite = turretsite
-    }
-
-    entity perviousTurret = curTurretSite.turret // get previous turret
     if( !IsValid( perviousTurret ) ) // previous turret not exist!
         return
 
-    entity turret = CreateNPC( "npc_turret_mega", info_target.GetTeam(), info_target.GetOrigin(), info_target.GetAngles() )
+    entity turret = CreateNPC( "npc_turret_mega", perviousTurret.GetTeam(), perviousTurret.GetOrigin(), perviousTurret.GetAngles() )
     SetSpawnOption_AISettings( turret, "npc_turret_mega_fortwar" )
     SetDefaultMPEnemyHighlight( turret ) // for sonar highlights to work
     AddEntityCallback_OnDamaged( turret, OnMegaTurretDamaged )
@@ -1047,11 +1038,19 @@ entity function FW_ReplaceMegaTurretFromTurretInfo( entity info_target )
     turret.s.minimapstate <- perviousTurret.s.minimapstate
     turret.s.turretflagid <- perviousTurret.s.turretflagid
     turret.s.lastDamagedTime <- perviousTurret.s.lastDamagedTime
+    turret.s.relatedBatteryPort <- perviousTurret.s.relatedBatteryPort
+
+    int maxHealth = perviousTurret.GetMaxHealth()
+    int maxShield = perviousTurret.GetShieldHealthMax()
+    turret.SetMaxHealth( maxHealth )
+    turret.SetHealth( maxHealth )
+    turret.SetShieldHealth( maxShield )
+    turret.SetShieldHealthMax( maxShield )
 
     // update turretSiteStruct
     foreach( TurretSiteStruct turretsite in file.turretsites )
     {
-        if( turretsite.site == info_target )
+        if( turretsite.turret == perviousTurret )
         {
             turretsite.turret = turret // only changed this
         }
@@ -1060,16 +1059,6 @@ entity function FW_ReplaceMegaTurretFromTurretInfo( entity info_target )
     perviousTurret.Destroy() // destroy previous one
 
     return turret
-}
-
-// can only get turrets create from CreateMegaTurretFromTurretInfo()
-entity function FW_GetTurretInfoFromMegaTurret( entity turret )
-{
-    foreach( TurretSiteStruct turretsite in file.turretsites )
-    {
-        if( turretsite.turret == turret )
-            return turretsite.site
-    }
 }
 
 void function OnMegaTurretDamaged( entity turret, var damageInfo )
@@ -1121,7 +1110,7 @@ void function InitTurretSettings()
         if( team == TEAM_IMC || team == TEAM_MILITIA ) 
             turret.s.baseTurret = true
 
-        SetTeam( minimapstate, team )
+        //SetTeam( minimapstate, team ) // setTeam() for icons is done in TurretStateWatcher()
         SetTeam( turret, team )
 
         //print( "Try to set globatNetEnt: " + "turretSite" + idString )   
@@ -1168,6 +1157,7 @@ void function TurretStateWatcher( TurretSiteStruct turretSite )
 {
     entity mapIcon = turretSite.minimapstate
     entity turret = turretSite.turret
+    entity batteryPort = expect entity( turret.s.relatedBatteryPort )
 
     mapIcon.Minimap_AlwaysShow( TEAM_IMC, null )
 	mapIcon.Minimap_AlwaysShow( TEAM_MILITIA, null )
@@ -1182,7 +1172,16 @@ void function TurretStateWatcher( TurretSiteStruct turretSite )
     string stateVarName = "turretStateFlags" + idString
 
     mapIcon.EndSignal( "OnDestroy" ) // mapIcon should be valid all time, tracking it is enough
-    SetGlobalNetEnt( siteVarName, mapIcon ) // tracking mapIcon's team
+
+    if( IsValid( batteryPort ) ) // has a related batteryPort
+    {
+        SetGlobalNetEnt( siteVarName, batteryPort ) // tracking batteryPort's positions and team
+        batteryPort.EndSignal( "OnDestroy" ) // also track this
+    }
+    else
+        SetGlobalNetEnt( siteVarName, mapIcon ) // tracking mapIcon's positions and team
+
+    SetGlobalNetInt( stateVarName, TURRET_NEATURAL_FLAG ) // init for all turrets
 
     while( true )
     {
@@ -1198,7 +1197,12 @@ void function TurretStateWatcher( TurretSiteStruct turretSite )
         if( !IsAlive( turret ) ) // turret down, waiting to be repaired
         {
             if( !isBaseTurret ) // never reset base turret's team
+            {
                 SetTeam( turret, TEAM_UNASSIGNED )
+                SetTeam( mapIcon, TEAM_UNASSIGNED )
+                if( IsValid( batteryPort ) )
+                    SetTeam( batteryPort, TEAM_UNASSIGNED )
+            }
             SetGlobalNetInt( stateVarName, TURRET_DESTROYED_FLAG )
             continue
         }
@@ -1553,7 +1557,7 @@ void function UpdateHarvesterHealth( int team )
         {
             int winnerTeam = GetOtherTeam(team)
             SetWinner( winnerTeam )
-            GameRules_SetTeamScore2( winnerTeam, 0 ) // force set score2 to 0( shield bar will empty )
+            GameRules_SetTeamScore2( team, 0 ) // force set score2 to 0( shield bar will empty )
             break
         }
     }
