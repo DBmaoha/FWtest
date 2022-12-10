@@ -327,14 +327,18 @@ void function LoadEntities()
                     turret.s.lastDamagedTime <- 0.0             // float, for showing turret underattack icons
                     turret.s.relatedBatteryPort <- null         // entity, corssfile
 
-                    // minimap icons
+                    // minimap icons holder
                     entity minimapstate = CreateEntity( "prop_script" )
-                    minimapstate.SetValueForModelKey( info_target.GetModelName() )
+                    minimapstate.SetValueForModelKey( $"models/communication/flag_base.mdl" ) // info_target.GetModelName() will get big models even turret's! thanks to respawn
                     minimapstate.SetOrigin( info_target.GetOrigin() )
                     minimapstate.SetAngles( info_target.GetAngles() )
                     //SetTeam( minimapstate, info_target.GetTeam() ) // setTeam() for icons is done in TurretStateWatcher()
                     minimapstate.kv.solid = SOLID_VPHYSICS
                     DispatchSpawn( minimapstate )
+                    // show on minimaps
+                    minimapstate.Minimap_AlwaysShow( TEAM_IMC, null )
+                    minimapstate.Minimap_AlwaysShow( TEAM_MILITIA, null )
+                    minimapstate.Minimap_SetCustomState( eMinimapObject_prop_script.FW_BUILDSITE_SHIELDED )
 
                     turretsite.minimapstate = minimapstate
                     turret.s.minimapstate = minimapstate
@@ -1159,10 +1163,6 @@ void function TurretStateWatcher( TurretSiteStruct turretSite )
     entity turret = turretSite.turret
     entity batteryPort = expect entity( turret.s.relatedBatteryPort )
 
-    mapIcon.Minimap_AlwaysShow( TEAM_IMC, null )
-	mapIcon.Minimap_AlwaysShow( TEAM_MILITIA, null )
-    mapIcon.Minimap_SetCustomState( eMinimapObject_prop_script.FW_BUILDSITE_SHIELDED )
-
     turret.SetMaxHealth( FW_DEFAULT_TURRET_HEALTH )
     turret.SetHealth( FW_DEFAULT_TURRET_HEALTH )
     turret.SetShieldHealthMax( FW_DEFAULT_TURRET_SHIELD )
@@ -1171,16 +1171,19 @@ void function TurretStateWatcher( TurretSiteStruct turretSite )
     string siteVarName = "turretSite" + idString
     string stateVarName = "turretStateFlags" + idString
 
-    mapIcon.EndSignal( "OnDestroy" ) // mapIcon should be valid all time, tracking it is enough
+    // battery overlay icons holder
+    entity overlayState = CreateEntity( "prop_script" )
+    overlayState.SetValueForModelKey( $"models/communication/flag_base.mdl" ) // requires a model to show overlays
+    overlayState.SetOrigin( batteryPort.GetOrigin() ) // tracking batteryPort's positions
+    overlayState.SetAngles( batteryPort.GetAngles() )
+    overlayState.kv.solid = SOLID_VPHYSICS
+    DispatchSpawn( overlayState )
 
-    if( IsValid( batteryPort ) ) // has a related batteryPort
-    {
-        SetGlobalNetEnt( siteVarName, batteryPort ) // tracking batteryPort's positions and team
-        batteryPort.EndSignal( "OnDestroy" ) // also track this
-    }
-    else
-        SetGlobalNetEnt( siteVarName, mapIcon ) // tracking mapIcon's positions and team
+    mapIcon.EndSignal( "OnDestroy" ) // mapIcon should be valid all time, tracking it
+    batteryPort.EndSignal( "OnDestroy" ) // also track this
+    overlayState.EndSignal( "OnDestroy" )
 
+    SetGlobalNetEnt( siteVarName, overlayState ) // tracking batteryPort's positions and team
     SetGlobalNetInt( stateVarName, TURRET_NEATURAL_FLAG ) // init for all turrets
 
     while( true )
@@ -1200,8 +1203,8 @@ void function TurretStateWatcher( TurretSiteStruct turretSite )
             {
                 SetTeam( turret, TEAM_UNASSIGNED )
                 SetTeam( mapIcon, TEAM_UNASSIGNED )
-                if( IsValid( batteryPort ) )
-                    SetTeam( batteryPort, TEAM_UNASSIGNED )
+                SetTeam( batteryPort, TEAM_UNASSIGNED )
+                SetTeam( overlayState, TEAM_UNASSIGNED )
             }
             SetGlobalNetInt( stateVarName, TURRET_DESTROYED_FLAG )
             continue
@@ -1210,6 +1213,8 @@ void function TurretStateWatcher( TurretSiteStruct turretSite )
         int turretTeam = turret.GetTeam()
         int iconTeam = turretTeam == TEAM_BOTH ? TEAM_UNASSIGNED : turretTeam // specific check
         SetTeam( mapIcon, iconTeam ) // update icon's team
+        SetTeam( batteryPort, turretTeam ) // update batteryPort's team
+        SetTeam( overlayState, iconTeam ) // update overlayEnt's team
 
         float lastDamagedTime = expect float( turret.s.lastDamagedTime )
         int stateFlag = TURRET_NEATURAL_FLAG
