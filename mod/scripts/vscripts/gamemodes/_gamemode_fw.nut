@@ -1373,7 +1373,8 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
 
     if ( damageSourceID == eDamageSourceId.mp_titanweapon_flightcore_rockets ||
         damageSourceID == eDamageSourceId.mp_titanweapon_salvo_rockets ||
-        damageSourceID == eDamageSourceId.mp_titanweapon_shoulder_rockets
+        damageSourceID == eDamageSourceId.mp_titanweapon_shoulder_rockets ||
+        damageSourceID == eDamageSourceId.mp_titanweapon_dumbfire_rockets
     ) // titan missiles
         DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/3 ) 
 
