@@ -1371,8 +1371,11 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
     if ( damageSourceID == eDamageSourceId.mp_titancore_laser_cannon )
         DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/100 ) // laser core shreds super well for some reason
 
-    if ( damageSourceID == eDamageSourceId.mp_titanweapon_flightcore_rockets )
-        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/4 ) // flight core shreds super well for some reason
+    if ( damageSourceID == eDamageSourceId.mp_titanweapon_flightcore_rockets ||
+        damageSourceID == eDamageSourceId.mp_titanweapon_salvo_rockets ||
+        damageSourceID == eDamageSourceId.mp_titanweapon_shoulder_rockets
+    ) // titan missiles
+        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/3 ) 
 
     if ( damageSourceID == eDamageSourceId.mp_titanweapon_meteor_thermite || 
         damageSourceID == eDamageSourceId.mp_titanweapon_flame_wall ||
