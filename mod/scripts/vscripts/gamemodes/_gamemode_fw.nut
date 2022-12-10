@@ -1206,7 +1206,10 @@ void function TurretStateWatcher( TurretSiteStruct turretSite )
         if( !IsAlive( turret ) ) // turret down, waiting to be repaired
         {
             if( !isBaseTurret ) // never reset base turret's team
+            {
                 SetTeam( turret, TEAM_UNASSIGNED )
+                SetTeam( mapIcon, TEAM_UNASSIGNED )
+            }
             SetGlobalNetInt( stateVarName, TURRET_DESTROYED_FLAG )
             continue
         }
