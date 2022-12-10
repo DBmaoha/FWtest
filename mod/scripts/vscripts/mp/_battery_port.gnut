@@ -26,15 +26,16 @@ void function InitTurretBatteryPort( entity batteryPort )
     //batteryPort.s.hasBattery <- false             // bool, batteryPackInside is enough
     batteryPort.s.batteryPackInside <- null         // entity
     batteryPort.s.beingUsed <- false                // bool
+    batteryPort.s.hackAvaliable <- true            // bool, for controlling hacking avaliablity
 
     entity turret = GetNearestMegaTurret( batteryPort ) // consider this is the port's related turret
-    if( IsValid( turret ) )
-    {
-        SetTeam( batteryPort, turret.GetTeam() )
-        batteryPort.s.relatedTurret = turret
-        turret.s.relatedBatteryPort = batteryPort // do it here
-        thread TrackTurretLifeTime( batteryPort, turret )
-    }
+
+    SetTeam( batteryPort, turret.GetTeam() )
+    batteryPort.s.relatedTurret = turret
+    if( turret.s.baseTurret ) // this is a base turret!
+        batteryPort.s.hackAvaliable = false
+    turret.s.relatedBatteryPort = batteryPort // do it here
+    thread TrackTurretLifeTime( batteryPort, turret )
 
     batteryPort.SetUsableByGroup( "pilot" )
     batteryPort.SetUsePrompts( "#FW_USE_GENERATOR_NO_BATTERY", "#FW_USE_GENERATOR_NO_BATTERY" ) // don't know what to use
@@ -61,6 +62,11 @@ void function TrackTurretLifeTime( entity batteryPort, entity turret )
         WaitFrame()
         if( turret.GetShieldHealth() == 0 ) // no shield mooooooooooo
             TryCleanUpBatteryInBatteryPort( batteryPort )
+        if( !IsAlive( turret ) ) // turret down
+        {
+            if( !turret.s.baseTurret )
+                batteryPort.s.hackAvaliable = true // this ports is able to be hack   
+        }
     }
 }
 
@@ -108,15 +114,19 @@ void function TryUseTurretBatteryPort( entity player, entity batteryPort )
     if( !IsValid( turret ) ) // turret has been destroyed!
         return
 
-    // get turret's team, decide behavior
-    bool sameTeam = turret.GetTeam() == player.GetTeam() || turret.GetTeam() == TEAM_BOTH || turret.GetTeam() == TEAM_UNASSIGNED
+    // get turret's settings, decide behavior
+    bool validTeam = turret.GetTeam() == player.GetTeam() || turret.GetTeam() == TEAM_BOTH || turret.GetTeam() == TEAM_UNASSIGNED
     bool isBaseTurret = expect bool( turret.s.baseTurret )
-    if( IsValid( batteryPort.s.batteryPackInside ) && !sameTeam ) // port already has a battery
+    // is this port able to be hacked
+    bool portHackAvaliable = expect bool( batteryPort.s.hackAvaliable )
+
+    // port already has a battery, enemy try to remove it
+    if( IsValid( batteryPort.s.batteryPackInside ) && !validTeam ) 
     {
-        // enemy try to remove it
         waitthread PlayerRemoveBatteryPackFromPort( player, batteryPort )
     }
-    else if( !IsValid( batteryPort.s.batteryPackInside ) && PlayerHasBattery( player ) && sameTeam ) // player has a battery
+    // player has a battery, team valid or able to hack && not a base turret
+    else if( !IsValid( batteryPort.s.batteryPackInside ) && PlayerHasBattery( player ) && ( validTeam || ( portHackAvaliable && !isBaseTurret ) ) )
     {
         // friendly try to apply one
         waitthread PlayerApplesBatteryPackToPort( player, batteryPort )
@@ -230,6 +240,7 @@ void function ApplyBatteryToBatteryPort( entity player, entity batteryPort )
     battery.SetParent( batteryPort, "REF" )
     battery.SetOrigin( < 0,0,5 > ) // offset
     batteryPort.s.batteryPackInside = battery
+    batteryPort.s.hackAvaliable = false // can't be hacked again until completely killed
 
     // change turret settings
     bool turretReplaced = false
