@@ -1434,7 +1434,7 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
     {
         int winnerTeam = GetOtherTeam( harvester.GetTeam() )
         SetWinner( winnerTeam )
-        GameRules_SetTeamScore( winnerTeam, 0 ) // force set score to 0( health 0% )
+        GameRules_SetTeamScore( harvester.GetTeam(), 0 ) // force set score to 0( health 0% )
     }
 }
 
