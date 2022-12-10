@@ -1048,6 +1048,13 @@ entity function FW_ReplaceMegaTurretFromTurretInfo( entity info_target )
     turret.s.turretflagid <- perviousTurret.s.turretflagid
     turret.s.lastDamagedTime <- perviousTurret.s.lastDamagedTime
 
+    int maxHealth = perviousTurret.GetMaxHealth()
+    int maxShield = perviousTurret.GetShieldHealthMax()
+    turret.SetMaxHealth( maxHealth )
+    turret.SetHealth( maxHealth )
+    turret.SetShieldHealth( maxShield )
+    turret.SetShieldHealthMax( maxShield )
+
     // update turretSiteStruct
     foreach( TurretSiteStruct turretsite in file.turretsites )
     {
