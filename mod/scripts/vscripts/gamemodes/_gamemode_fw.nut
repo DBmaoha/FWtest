@@ -1434,6 +1434,7 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
     {
         int winnerTeam = GetOtherTeam( harvester.GetTeam() )
         SetWinner( winnerTeam )
+        GameRules_SetTeamScore2( harvester.GetTeam(), 0 ) // force set score2 to 0( shield bar will empty )
         GameRules_SetTeamScore( harvester.GetTeam(), 0 ) // force set score to 0( health 0% )
     }
 }
@@ -1558,11 +1559,12 @@ void function UpdateHarvesterHealth( int team )
             GameRules_SetTeamScore2( team, 1.0 * harvester.GetShieldHealth() / harvester.GetShieldHealthMax() * 100 )
             WaitFrame()
         }
-        else
+        else // harvester down
         {
             int winnerTeam = GetOtherTeam(team)
             SetWinner( winnerTeam )
             GameRules_SetTeamScore2( team, 0 ) // force set score2 to 0( shield bar will empty )
+            GameRules_SetTeamScore( team, 0 ) // force set score to 0( health 0% )
             break
         }
     }
