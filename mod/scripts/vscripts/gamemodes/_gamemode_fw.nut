@@ -1031,6 +1031,7 @@ void function OnMegaTurretDamaged( entity turret, var damageInfo )
             if( attacker.IsPlayer() && attacker.GetTeam() != turret.GetTeam() ) // good to have
                 MessageToPlayer( attacker, eEventNotifications.TurretTitanDamageOnly )
             DamageInfo_SetDamage( damageInfo, turret.GetShieldHealth() )
+            return
         }
     }
 
@@ -1304,7 +1305,7 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
             if( attacker.IsPlayer() )
                 Remote_CallFunction_NonReplay( attacker , "ServerCallback_FW_NotifyTitanRequired" )
             DamageInfo_SetDamage( damageInfo, harvester.GetShieldHealth() )
-            damageAmount = 0 // never damages haveter's prop
+            damageAmount = 0 // never damage haveter's prop
         }
         if( !harvesterstruct.harvesterShieldDown )
         {
