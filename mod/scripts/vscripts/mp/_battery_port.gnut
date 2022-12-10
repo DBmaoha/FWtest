@@ -335,6 +335,7 @@ void function RemoveBatteryFromPort( entity player, entity batteryPort )
     if( !IsValid( battery ) )
         return
     // destroy the battery, don't give it to any players
+    battery.ClearParent()
     battery.Destroy()
 
     entity turret = expect entity( batteryPort.s.relatedTurret )
