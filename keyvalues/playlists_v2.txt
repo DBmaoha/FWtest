@@ -17,6 +17,7 @@ playlists
 				classic_mp 1
 				scorelimit 100 // score is a percentage so ofc need max to be 100%
 				timelimit 15
+				power_ups_enabled 1
 			}
 		}
 	}
@@ -39,6 +40,7 @@ playlists
 				classic_mp 1
 				scorelimit 100
 				timelimit 15
+				power_ups_enabled 1
 				
 				gamemode_score_hint #GAMEMODE_SCORE_HINT_TDM
 			}	
