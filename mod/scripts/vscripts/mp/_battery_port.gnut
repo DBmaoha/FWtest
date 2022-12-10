@@ -22,7 +22,7 @@ struct
 void function InitTurretBatteryPort( entity batteryPort )
 {
     batteryPort.s.relatedTurret <- null             // entity, for saving batteryPort's nearest turret
-    batteryPort.s.relatedTurretInfo <- null         // entity
+    //batteryPort.s.relatedTurretInfo <- null       // entity, using minimapstate now
     //batteryPort.s.hasBattery <- false             // bool, batteryPackInside is enough
     batteryPort.s.batteryPackInside <- null         // entity
     batteryPort.s.beingUsed <- false                // bool
@@ -32,11 +32,9 @@ void function InitTurretBatteryPort( entity batteryPort )
     {
         SetTeam( batteryPort, turret.GetTeam() )
         batteryPort.s.relatedTurret = turret
+        turret.s.relatedBatteryPort = batteryPort // do it here
         thread TrackTurretLifeTime( batteryPort, turret )
     }
-    entity turretInfo = FW_GetTurretInfoFromMegaTurret( turret )
-    if( IsValid( turretInfo ) )
-        batteryPort.s.relatedTurretInfo = turretInfo
 
     batteryPort.SetUsableByGroup( "pilot" )
     batteryPort.SetUsePrompts( "#FW_USE_GENERATOR_NO_BATTERY", "#FW_USE_GENERATOR_NO_BATTERY" ) // don't know what to use
@@ -94,7 +92,6 @@ void function TryUseTurretBatteryPort( entity player, entity batteryPort )
     )
 
     entity turret = expect entity( batteryPort.s.relatedTurret )
-    entity info = expect entity( batteryPort.s.relatedTurretInfo )
     if( !IsValid( turret ) ) // turret has been destroyed!
         return
 
@@ -226,8 +223,7 @@ void function ApplyBatteryToBatteryPort( entity player, entity batteryPort )
     entity turret = expect entity( batteryPort.s.relatedTurret ) // consider this is the port's related turret
     if( !IsAlive( turret ) ) // turret has been killed!
     {
-        entity info = expect entity( batteryPort.s.relatedTurretInfo )
-        turret = FW_ReplaceMegaTurretFromTurretInfo( info )
+        turret = FW_ReplaceMegaTurret( turret )
         if( !IsValid( turret ) ) // replace failed!
             return
         batteryPort.s.relatedTurret = turret
