@@ -100,6 +100,7 @@ void function TryUseTurretBatteryPort( entity player, entity batteryPort )
 
     // get turret's team, decide behavior
     bool sameTeam = turret.GetTeam() == player.GetTeam() || turret.GetTeam() == TEAM_BOTH || turret.GetTeam() == TEAM_UNASSIGNED
+    bool isBaseTurret = expect bool( turret.s.baseTurret )
     if( IsValid( batteryPort.s.batteryPackInside ) && !sameTeam ) // port already has a battery
     {
         // enemy try to remove it
@@ -352,6 +353,9 @@ void function RemoveBatteryFromPort( entity player, entity batteryPort )
     turret.SetHealth( max( 0, turret.GetHealth() - ( turret.GetMaxHealth() / 3 ) ) ) // take less damage than applying
     turret.SetShieldHealth( 0 ) // clean all shields left
     EmitSoundOnEntityOnlyToPlayer( player, player, "UI_TitanBattery_Pilot_Take_TitanBattery" )
+
+    // give player titan meter
+    AddPlayerScore( player, "PilotBatteryStolen", player )
 }
 
 void function PortBatteryRemoval_ShowBattery( entity player )

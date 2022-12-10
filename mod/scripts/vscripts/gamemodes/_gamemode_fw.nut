@@ -332,7 +332,7 @@ void function LoadEntities()
                     minimapstate.SetValueForModelKey( info_target.GetModelName() )
                     minimapstate.SetOrigin( info_target.GetOrigin() )
                     minimapstate.SetAngles( info_target.GetAngles() )
-                    SetTeam( minimapstate, info_target.GetTeam() )
+                    //SetTeam( minimapstate, info_target.GetTeam() ) // setTeam() for icons is done in TurretStateWatcher()
                     minimapstate.kv.solid = SOLID_VPHYSICS
                     DispatchSpawn( minimapstate )
 
@@ -1121,7 +1121,7 @@ void function InitTurretSettings()
         if( team == TEAM_IMC || team == TEAM_MILITIA ) 
             turret.s.baseTurret = true
 
-        SetTeam( minimapstate, team )
+        //SetTeam( minimapstate, team ) // setTeam() for icons is done in TurretStateWatcher()
         SetTeam( turret, team )
 
         //print( "Try to set globatNetEnt: " + "turretSite" + idString )   
@@ -1183,6 +1183,7 @@ void function TurretStateWatcher( TurretSiteStruct turretSite )
 
     mapIcon.EndSignal( "OnDestroy" ) // mapIcon should be valid all time, tracking it is enough
     SetGlobalNetEnt( siteVarName, mapIcon ) // tracking mapIcon's team
+    SetGlobalNetInt( stateVarName, TURRET_NEATURAL_FLAG ) // init for all turrets
 
     while( true )
     {
