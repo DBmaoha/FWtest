@@ -1554,7 +1554,7 @@ void function UpdateHarvesterHealth( int team )
         {
             int winnerTeam = GetOtherTeam(team)
             SetWinner( winnerTeam )
-            GameRules_SetTeamScore2( winnerTeam, 0 ) // force set score2 to 0( shield bar will empty )
+            GameRules_SetTeamScore2( team, 0 ) // force set score2 to 0( shield bar will empty )
             break
         }
     }
