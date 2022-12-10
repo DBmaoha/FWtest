@@ -261,8 +261,11 @@ void function ApplyBatteryToBatteryPort( entity player, entity batteryPort )
     }
 
     // restore turret health
+    int newHealth = int( min( turret.GetMaxHealth(), turret.GetHealth() + ( turret.GetMaxHealth() / 3 ) ) )
+    if( turretReplaced ) // replaced turret will spawn with 1/2 health
+        newHealth = ( turret.GetMaxHealth() / 2 )
     // this can be too much powerful
-    turret.SetHealth( min( turret.GetMaxHealth(), turret.GetHealth() + ( turret.GetMaxHealth() / 2 ) ) )
+    turret.SetHealth( newHealth )
     turret.SetShieldHealth( turret.GetShieldHealthMax() )
     EmitSoundOnEntityOnlyToPlayer( player, player, "UI_TitanBattery_Pilot_Give_TitanBattery" )
 
@@ -370,7 +373,7 @@ void function RemoveBatteryFromPort( entity player, entity batteryPort )
     //int damageAmount = int( turret.GetMaxHealth() * 0.5 ) // not just shield damage
     //turret.TakeDamage( damageAmount, player, player, { damageSourceId = eDamageSourceId.rodeo_battery_removal, scriptType = damageTypes.rodeoBatteryRemoval } )
     // directly set turret's health
-    turret.SetHealth( max( 0, turret.GetHealth() - ( turret.GetMaxHealth() / 3 ) ) ) // take less damage than applying
+    turret.SetHealth( max( 0, turret.GetHealth() - ( turret.GetMaxHealth() / 3 ) ) ) // take same damage than applying
     turret.SetShieldHealth( 0 ) // clean all shields left
     EmitSoundOnEntityOnlyToPlayer( player, player, "UI_TitanBattery_Pilot_Take_TitanBattery" )
 
