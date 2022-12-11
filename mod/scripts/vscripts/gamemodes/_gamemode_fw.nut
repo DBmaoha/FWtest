@@ -29,7 +29,7 @@ const int FW_DEFAULT_HARVESTER_SHIELD = 5000
 const int FW_DEFAULT_TURRET_HEALTH = 12500
 const int FW_DEFAULT_TURRET_SHIELD = 4000
 // you need to deal this much damage to trigger "FortWarTowerDamage" score event
-const int FW_HARVESTER_DAMAGE_SEGMENT = 2500
+const int FW_HARVESTER_DAMAGE_SEGMENT = 1500
 
 // basically needs to match "waves count - bosswaves count"
 const int FW_MAX_LEVELS = 3
@@ -326,7 +326,7 @@ void function InitFWScoreEvents()
     ScoreEvent_SetEarnMeterValues( "FortWarSecuringGatheredResources", 0.0, 0.05 ) // unused
 
     // tower
-    ScoreEvent_SetEarnMeterValues( "FortWarTowerDamage", 0.0, 0.1 ) // use the const FW_HARVESTER_DAMAGE_SEGMENT
+    ScoreEvent_SetEarnMeterValues( "FortWarTowerDamage", 0.0, 0.05 ) // using the const FW_HARVESTER_DAMAGE_SEGMENT
     ScoreEvent_SetEarnMeterValues( "FortWarTowerDefense", 0.0, 0.1, 0.0 ) // titans don't earn
     ScoreEvent_SetEarnMeterValues( "FortWarShieldDestroyed", 0.0, 0.15 )
 
@@ -347,28 +347,48 @@ void function HandleFWPlayerKilledScoreEvent( entity victim, entity attacker )
     // this function only handles player's kills
     if( !attacker.IsPlayer() )
         return
+    
+    // suicide don't get scores
+    if( attacker == victim )
+        return
 
     int attackerTeam = attacker.GetTeam()
     int victimTeam = victim.GetTeam()
 
     string scoreEvent = ""
+    int secondaryScore = 0
     entity attackerHarvester = FW_GetTeamHarvesterProp( attackerTeam )
 
     if( FW_IsPlayerInEnemyTerritory( victim ) ) // victim is in enemy territory
+    {
         scoreEvent = "FortWarDefense" // enemy earn score from defense
+        secondaryScore = POINTVALUE_FW_DEFENSE
+    }
+
+    if( FW_IsPlayerInFriendlyTerritory( victim ) ) // victim is in friendly territory
+    {
+        scoreEvent = "FortWarAssault" // enemy earn score from assault
+        secondaryScore = POINTVALUE_FW_ASSAULT
+    }
 
     if( victim in file.playerDamageHarvester ) // victim has damaged the harvester this life
     {    
         float damageTime = file.playerDamageHarvester[ victim ].recentDamageTime
 
         // is victim recently damaged havester?
-        if( damageTime <= FW_DEFENSE_REQURED_TIME )
+        if( damageTime <= Time() + FW_DEFENSE_REQURED_TIME )
+        {
             scoreEvent = "FortWarTowerDefense" // you defend the tower!
+            secondaryScore = POINTVALUE_FW_TOWER_DEFENSE
+        }
 
     }
 
     if( scoreEvent != "" )
+    {
         AddPlayerScore( attacker, scoreEvent, victim )
+        attacker.AddToPlayerGameStat( PGS_DEFENSE_SCORE, secondaryScore )
+    }
 }
 
 /////////////////////////////////////
@@ -1686,10 +1706,6 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
 			PlayFactionDialogueToTeam( "fortwar_baseShieldDownFriendly", friendlyTeam )
 			PlayFactionDialogueToTeam( "fortwar_baseShieldDownEnemy", enemyTeam )
 			harvesterstruct.harvesterShieldDown = true // prevent shield dialogues from repeating
-		
-            // score event
-            AddPlayerScore( attacker, "FortWarShieldDestroyed", attacker )
-            attacker.AddToPlayerGameStat( PGS_DEFENSE_SCORE, damageAmount )
         }
 
 		harvesterstruct.harvesterDamageTaken = harvesterstruct.harvesterDamageTaken + damageAmount // track damage for wave recaps
@@ -1729,16 +1745,19 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
 
 	if ( attacker.IsPlayer() )
 	{
-		attacker.NotifyDidDamage( harvester, DamageInfo_GetHitBox( damageInfo ), DamageInfo_GetDamagePosition( damageInfo ), 		DamageInfo_GetCustomDamageType( damageInfo ), DamageInfo_GetDamage( damageInfo ), DamageInfo_GetDamageFlags( damageInfo ), 		DamageInfo_GetHitGroup( damageInfo ), DamageInfo_GetWeapon( damageInfo ), DamageInfo_GetDistFromAttackOrigin( damageInfo ) )
-		
+		attacker.NotifyDidDamage( harvester, DamageInfo_GetHitBox( damageInfo ), DamageInfo_GetDamagePosition( damageInfo ), DamageInfo_GetCustomDamageType( damageInfo ), DamageInfo_GetDamage( damageInfo ), DamageInfo_GetDamageFlags( damageInfo ), DamageInfo_GetHitGroup( damageInfo ), DamageInfo_GetWeapon( damageInfo ), DamageInfo_GetDistFromAttackOrigin( damageInfo ) )
+
+        // get newest damage for adding score!
+        int scoreDamage = int( DamageInfo_GetDamage( damageInfo ) )
         // score events
-        attacker.AddToPlayerGameStat( PGS_ASSAULT_SCORE, damageAmount )
-        file.playerDamageHarvester[ attacker ].storedDamage += int( damageAmount )
+        attacker.AddToPlayerGameStat( PGS_ASSAULT_SCORE, scoreDamage )
+        file.playerDamageHarvester[ attacker ].storedDamage += scoreDamage
 
         // enough to earn score?
         if( file.playerDamageHarvester[ attacker ].storedDamage >= FW_HARVESTER_DAMAGE_SEGMENT )
         {
             AddPlayerScore( attacker, "FortWarTowerDamage", attacker )
+            attacker.AddToPlayerGameStat( PGS_DEFENSE_SCORE, POINTVALUE_FW_TOWER_DAMAGE )
             file.playerDamageHarvester[ attacker ].storedDamage -= FW_HARVESTER_DAMAGE_SEGMENT // reset stored damage
         }
 	}

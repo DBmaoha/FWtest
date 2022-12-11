@@ -25,8 +25,8 @@ void function CreateGamemodeFW()
 	
 	// waiting to be synced with client
 	//GameMode_AddScoreboardColumnData( FORT_WAR, "#SCOREBOARD_KILLS", PGS_KILLS, 2 )
-	//GameMode_AddScoreboardColumnData( FORT_WAR, "#SCOREBOARD_COOP_POINTS", PGS_ASSAULT_SCORE, 6 )
 	//GameMode_AddScoreboardColumnData( FORT_WAR, "#SCOREBOARD_SUPPORT_SCORE", PGS_DEFENSE_SCORE, 4 )
+	//GameMode_AddScoreboardColumnData( FORT_WAR, "#SCOREBOARD_COOP_POINTS", PGS_ASSAULT_SCORE, 6 )
 
 	AddPrivateMatchMode( FORT_WAR )
 

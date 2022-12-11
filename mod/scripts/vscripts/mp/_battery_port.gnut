@@ -290,11 +290,17 @@ void function ApplyBatteryToBatteryPort( entity player, entity batteryPort )
 
     // score event
     string scoreEvent = "FortWarForwardConstruction"
-    if( isBaseTurret )
+    int secondaryScore = POINTVALUE_FW_FORWARD_CONSTRUCTION
+    if( isBaseTurret ) // this is a base turret
+    {
         scoreEvent = "FortWarBaseConstruction"
+        secondaryScore = POINTVALUE_FW_FORWARD_CONSTRUCTION
+    }
     AddPlayerScore( player, scoreEvent, player ) // player themself gets more meter
+    player.AddToPlayerGameStat( PGS_DEFENSE_SCORE, secondaryScore )
 
-    string teamTurretCount = GetTeamTurretCount_ReturnString( playerTeam )
+    // get turrets alive, for adding scores
+    string teamTurretCount = GetTeamAliveTurretCount_ReturnString( playerTeam )
     foreach( entity friendly in GetPlayerArrayOfTeam( playerTeam ) )
         AddPlayerScore( friendly, "FortWarTeamTurretControlBonus_" + teamTurretCount, friendly )
 
@@ -305,12 +311,12 @@ void function ApplyBatteryToBatteryPort( entity player, entity batteryPort )
 }
 
 // this will get english name of the count, since the "FortWarTeamTurretControlBonus_" score event uses it
-string function GetTeamTurretCount_ReturnString( int team )
+string function GetTeamAliveTurretCount_ReturnString( int team )
 {
     int turretCount
     foreach( entity turret in GetNPCArrayByClass( "npc_turret_mega" ) )
     {
-        if( turret.GetTeam() == team )
+        if( turret.GetTeam() == team && IsAlive( turret ) )
             turretCount += 1
     }
 
