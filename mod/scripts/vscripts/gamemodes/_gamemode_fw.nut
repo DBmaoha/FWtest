@@ -110,7 +110,7 @@ struct
     array<CampSiteStruct> fwCampSites
 
     // respawn already have a FW_TowerData struct! this table is only for score events
-    table< int, table< entity, HarvesterDamageStruct > > harvesterDamageHistory // team, table< player, time >
+    table< entity, HarvesterDamageStruct > playerDamageHarvester // team, table< player, time >
     
     // this is for saving territory's connecting time, try not to make faction dialogues play together
     table< int, float > teamTerrLastConnectTime // team, time
@@ -342,9 +342,9 @@ void function HandleFWPlayerKilledScoreEvent( entity victim, entity attacker )
     if( FW_IsPlayerInEnemyTerritory( victim ) ) // victim is in enemy territory
         scoreEvent = "FortWarDefense" // enemy earn score from defense
 
-    if( victim in file.harvesterDamageHistory[ attackerTeam ] ) // victim has damaged the harvester this life
+    if( victim in file.playerDamageHarvester ) // victim has damaged the harvester this life
     {    
-        float damageTime = file.harvesterDamageHistory[ attackerTeam ][ victim ].recentDamageTime
+        float damageTime = file.playerDamageHarvester[ victim ].recentDamageTime
 
         // is victim recently damaged havester?
         if( damageTime <= FW_DEFENSE_REQURED_TIME )
@@ -475,13 +475,11 @@ void function LoadEntities()
                     if ( info_target.GetTeam() == TEAM_IMC )
                     {
 					    file.harvesterImc_info = info_target
-                        file.harvesterDamageHistory[ TEAM_IMC ] <- {} // init
                         //print("fw_tower tracker spawned")
                     }
                     if ( info_target.GetTeam() == TEAM_MILITIA )
                     {
 					    file.harvesterMlt_info = info_target
-                        file.harvesterDamageHistory[ TEAM_MILITIA ] <- {} // init
                         //print("fw_tower tracker spawned")
                     }
                     break
@@ -620,7 +618,7 @@ void function InitCampSpawnerLevel() // can edit this to make more spawns, alert
 void function InitFWPlayers( entity player )
 {
     HarvesterDamageStruct emptyStruct
-    file.harvesterDamageHistory[ TEAM_MILITIA ][ player ] <- emptyStruct
+    file.playerDamageHarvester[ player ] <- emptyStruct
 }
 
 ///////////////////////////////////////////
@@ -1653,7 +1651,10 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
 			PlayFactionDialogueToTeam( "fortwar_baseShieldDownFriendly", friendlyTeam )
 			PlayFactionDialogueToTeam( "fortwar_baseShieldDownEnemy", enemyTeam )
 			harvesterstruct.harvesterShieldDown = true // prevent shield dialogues from repeating
-		}
+		
+            // score event
+            AddPlayerScore( attacker, "FortWarShieldDestroyed", attacker )
+        }
 
 		harvesterstruct.harvesterDamageTaken = harvesterstruct.harvesterDamageTaken + damageAmount // track damage for wave recaps
 		float newHealth = harvester.GetHealth() - damageAmount
@@ -1699,7 +1700,17 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
 	if ( attacker.IsPlayer() )
 	{
 		attacker.NotifyDidDamage( harvester, DamageInfo_GetHitBox( damageInfo ), DamageInfo_GetDamagePosition( damageInfo ), 		DamageInfo_GetCustomDamageType( damageInfo ), DamageInfo_GetDamage( damageInfo ), DamageInfo_GetDamageFlags( damageInfo ), 		DamageInfo_GetHitGroup( damageInfo ), DamageInfo_GetWeapon( damageInfo ), DamageInfo_GetDistFromAttackOrigin( damageInfo ) )
-		//attacker.AddToPlayerGameStat( PGS_PILOT_KILLS, DamageInfo_GetDamage( damageInfo ) * 0.01 )
+		
+        // score events
+        attacker.AddToPlayerGameStat( PGS_ASSAULT_SCORE, damageAmount )
+        file.playerDamageHarvester[ attacker ].storedDamage += int( damageAmount )
+
+        // enough to earn score?
+        if( file.playerDamageHarvester[ attacker ].storedDamage >= FW_HARVESTER_DAMAGE_SEGMENT )
+        {
+            AddPlayerScore( attacker, "FortWarTowerDamage", attacker )
+            file.playerDamageHarvester[ attacker ].storedDamage -= FW_HARVESTER_DAMAGE_SEGMENT // reset stored damage
+        }
 	}
 
     harvesterstruct.lastDamage = Time()
