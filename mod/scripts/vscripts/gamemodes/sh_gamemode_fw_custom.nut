@@ -21,7 +21,7 @@ void function CreateGamemodeFW()
 	GameMode_SetDesc( FORT_WAR, "#PL_fw_desc" )
 
 	// fw lines are unfortunately not registered to faction dialogue, do it in gamemode script manually
-	//GameMode_SetGameModeAnnouncement( FORT_WAR, "fortwar_modeName" ) 
+	GameMode_SetGameModeAnnouncement( FORT_WAR, "fortwar_modeName" ) 
 	
 	// waiting to be synced with client
 	//GameMode_AddScoreboardColumnData( FORT_WAR, "#SCOREBOARD_KILLS", PGS_KILLS, 2 )
