@@ -1407,11 +1407,16 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
             PlayFactionDialogueToTeam( "fortwar_baseShieldDownFriendly", harvester.GetTeam() )
             PlayFactionDialogueToTeam( "fortwar_baseShieldDownEnemy", GetOtherTeam(harvester.GetTeam()) )
             harvesterstruct.harvesterShieldDown = true // prevent shield dialogues from repeating
+	foreach( entity player in GetPlayerArrayOfTeam_Alive( harvester.GetTeam() ) )
+		Remote_CallFunction_NonReplay( player , ServerCallback_FW_FriendlyBaseAttacked , GetStringID( "#FW_SHIELD_DOWN" ) )
         }
         harvesterstruct.harvesterDamageTaken = harvesterstruct.harvesterDamageTaken + damageAmount // track damage for wave recaps
         float newHealth = harvester.GetHealth() - damageAmount
         float oldhealthpercent = ( ( harvester.GetHealth().tofloat() / harvester.GetMaxHealth() ) * 100 )
         float healthpercent = ( ( newHealth / harvester.GetMaxHealth() ) * 100 )
+	if( Time() - harvesterstruct.lastDamage > FW_HARVESTER_DAMAGED_DEBOUNCE )
+		foreach( entity player in GetPlayerArrayOfTeam_Alive( harvester.GetTeam() ) )
+			Remote_CallFunction_NonReplay( player , ServerCallback_FW_FriendlyBaseAttacked , GetStringID( "#FW_TEAM_TOWER_UNDER_ATTACK" ) )
 
         if (healthpercent <= 75 && oldhealthpercent > 75) // we don't want the dialogue to keep saying "Harvester is below 75% health" everytime they take additional damage
         {
@@ -1447,6 +1452,11 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
         harvester.SetHealth( newHealth )
         harvesterstruct.havesterWasDamaged = true
     }
+	else{	//Shield not break
+		if( Time() - harvesterstruct.lastDamage > FW_HARVESTER_DAMAGED_DEBOUNCE )
+			foreach( entity player in GetPlayerArrayOfTeam_Alive( harvester.GetTeam() ) )
+				Remote_CallFunction_NonReplay( player , ServerCallback_FW_FriendlyBaseAttacked , GetStringID( "#FW_SHIELD_UNDER_ATTACK" ) )
+	}
 
     if ( attacker.IsPlayer() )
     {
