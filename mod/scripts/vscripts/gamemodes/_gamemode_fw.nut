@@ -111,7 +111,7 @@ struct
 
     // respawn already have a FW_TowerData struct! this table is only for score events
     table< int, table< entity, HarvesterDamageStruct > > harvesterDamageHistory // team, table< player, time >
-    
+
     // this is for saving territory's connecting time, try not to make faction dialogues play together
     table< int, float > teamTerrLastConnectTime // team, time
 
@@ -147,6 +147,10 @@ void function GamemodeFW_Init()
     ServerCommand( "sv_max_prop_data_dwords_multiplayer 300000" )
 
     ClassicMP_ForceDisableEpilogue( true ) // temp
+
+    //objective stuff
+    AddCallback_OnPilotBecomesTitan( SetTitanEarnObjective )
+    AddCallback_OnTitanBecomesPilot( SetPilotEarnObjective )
 }
 
 //////////////////////////
@@ -262,6 +266,7 @@ void function OnFWGamePlaying()
     FWAreaThreatLevelThink()
     StartFWCampThink()
     InitTurretSettings()
+    InitPlayerObjective()
 }
 
 void function OnFWGamePostmatch()
@@ -332,7 +337,7 @@ void function HandleFWPlayerKilledScoreEvent( entity victim, entity attacker )
     // this function only handles player's kills
     if( !attacker.IsPlayer() )
         return
-        
+
     int attackerTeam = attacker.GetTeam()
     int victimTeam = victim.GetTeam()
 
@@ -343,7 +348,7 @@ void function HandleFWPlayerKilledScoreEvent( entity victim, entity attacker )
         scoreEvent = "FortWarDefense" // enemy earn score from defense
 
     if( victim in file.harvesterDamageHistory[ attackerTeam ] ) // victim has damaged the harvester this life
-    {    
+    {
         float damageTime = file.harvesterDamageHistory[ attackerTeam ][ victim ].recentDamageTime
 
         // is victim recently damaged havester?
@@ -375,7 +380,7 @@ bool function TryFWTerritoryDialogue( entity territory, entity player )
     int enemyTeam = GetOtherTeam( terrTeam )
     bool sameTeam = terrTeam == player.GetTeam()
     bool isInDebounce = file.teamTerrLastConnectTime[ terrTeam ] + FW_TERRYTORY_DIALOGUE_DEBOUNCE >= Time()
-    
+
     // the territory trigger will only save players and titans
     array<entity> allEntsInside = GetAllEntitiesInTrigger( territory )
     allEntsInside.removebyvalue( null ) // since we're using a fake trigger, need to check this
@@ -397,7 +402,7 @@ bool function TryFWTerritoryDialogue( entity territory, entity player )
         if( enemy.IsTitan() )
             enemyTitansInside.append( enemy )
     }
-    
+
     print( "enemy in territory: " + string( enemiesInside.len() ) )
     print( "friendly in territory: " + string( friendliesInside.len() ) )
 
@@ -412,13 +417,13 @@ bool function TryFWTerritoryDialogue( entity territory, entity player )
     if( !sameTeam ) // player is not the same team as territory
     {
         // consider this means all enemies has left friendly territory, should use a debounce
-        if( enemiesInside.len() == 0 && !isInDebounce ) 
+        if( enemiesInside.len() == 0 && !isInDebounce )
         {
             PlayFactionDialogueToTeam( "fortwar_terEnemyExpelled", terrTeam )
             return true
         }
         // has more than 3 titans inside including new one, ignores debounce
-        else if( enemyTitansInside.len() >= 3 && thisTimeIsTitan ) 
+        else if( enemyTitansInside.len() >= 3 && thisTimeIsTitan )
         {
             PlayFactionDialogueToTeam( "fortwar_terPresentEnemyTitans", terrTeam )
             return true
@@ -442,7 +447,7 @@ bool function TryFWTerritoryDialogue( entity territory, entity player )
 
         // notify player friendly's behaves
         // consider this means all friendlies has left enemy territory
-        if( friendliesInside.len() == 0 && !sameTeam && !isInDebounce ) 
+        if( friendliesInside.len() == 0 && !sameTeam && !isInDebounce )
         {
             PlayFactionDialogueToTeam( "fortwar_terFriendlyExpelled", terrTeam )
             return true
@@ -532,7 +537,7 @@ void function LoadEntities()
 
                     turretsite.minimapstate = minimapstate
                     turret.s.minimapstate = minimapstate
-                    
+
                     break
 			}
 		}
@@ -994,9 +999,15 @@ void function EntityEnterFWTrig( entity trigger, entity ent, entity caller, var 
         MessageToPlayer( ent, eEventNotifications.Clear ) // clean up last message
         bool sameTeam = ent.GetTeam() == trigger.GetTeam()
         if ( sameTeam )
+        {
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyEnterFriendlyArea" )
+            ent.SetPlayerNetInt( "indicatorId" , 1 )
+        }
         else
+        {
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyEnterEnemyArea" )
+            ent.SetPlayerNetInt( "indicatorId" , 2 )
+        }
     }
 }
 
@@ -1027,6 +1038,7 @@ void function EntityLeaveFWTrig( entity trigger, entity ent, entity caller, var 
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyExitFriendlyArea" )
         else
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyExitEnemyArea" )
+        ent.SetPlayerNetInt( "indicatorId" , 4 )
     }
 }
 
@@ -1307,7 +1319,7 @@ void function OnMegaTurretDamaged( entity turret, var damageInfo )
     turret.s.lastDamagedTime = Time()
 
     if ( damageSourceID == eDamageSourceId.mp_titanweapon_heat_shield ||
-        damageSourceID == eDamageSourceId.mp_titanweapon_meteor_thermite || 
+        damageSourceID == eDamageSourceId.mp_titanweapon_meteor_thermite ||
         damageSourceID == eDamageSourceId.mp_titanweapon_flame_wall ||
         damageSourceID == eDamageSourceId.mp_titanability_slow_trap ||
         damageSourceID == eDamageSourceId.mp_titancore_flame_wave_secondary
@@ -1329,13 +1341,13 @@ void function InitTurretSettings()
         int stateFlag = 1 // netural
 
         // spawn with teamNumber?
-        if( team == TEAM_IMC || team == TEAM_MILITIA ) 
+        if( team == TEAM_IMC || team == TEAM_MILITIA )
             turret.s.baseTurret = true
 
         //SetTeam( minimapstate, team ) // setTeam() for icons is done in TurretStateWatcher()
         SetTeam( turret, team )
 
-        //print( "Try to set globatNetEnt: " + "turretSite" + idString )   
+        //print( "Try to set globatNetEnt: " + "turretSite" + idString )
 
         turret.s.turretflagid = idString
         turretSite.turretflagid = idString
@@ -1441,7 +1453,7 @@ void function TurretStateWatcher( TurretSiteStruct turretSite )
         // wrong dialogue, it will say "The turret you requested is on the way"
         //if( changedTeamThisFrame ) // has been hacked!
         //    PlayFactionDialogueToTeam( "fortwar_turretDeployFriendly", turretTeam )
-        
+
         int iconTeam = turretTeam == TEAM_BOTH ? TEAM_UNASSIGNED : turretTeam // specific check
         SetTeam( mapIcon, iconTeam ) // update icon's team
         SetTeam( batteryPort, turretTeam ) // update batteryPort's team
@@ -1493,7 +1505,7 @@ void function TurretStateWatcher( TurretSiteStruct turretSite )
             else
                 stateFlag = TURRET_MLT_FLAG
         }
-        
+
         // neatural states
         if( iconTeam == TEAM_UNASSIGNED )
         {
@@ -1506,7 +1518,7 @@ void function TurretStateWatcher( TurretSiteStruct turretSite )
         SetGlobalNetInt( stateVarName, stateFlag )
 
         // update these
-        lastFrameTeam = turretTeam 
+        lastFrameTeam = turretTeam
         lastFrameIsAlive = turretAlive
 
         WaitFrame()
@@ -1621,9 +1633,9 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
 		damageSourceID == eDamageSourceId.mp_titanweapon_shoulder_rockets ||
 		damageSourceID == eDamageSourceId.mp_titanweapon_dumbfire_rockets
 	) // titan missiles
-		DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/3 ) 
+		DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/3 )
 
-	if ( damageSourceID == eDamageSourceId.mp_titanweapon_meteor_thermite || 
+	if ( damageSourceID == eDamageSourceId.mp_titanweapon_meteor_thermite ||
 		damageSourceID == eDamageSourceId.mp_titanweapon_flame_wall ||
 		damageSourceID == eDamageSourceId.mp_titanability_slow_trap ||
 		damageSourceID == eDamageSourceId.mp_titancore_flame_wave_secondary
@@ -1703,7 +1715,7 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
 	}
 
     harvesterstruct.lastDamage = Time()
-    
+
     if ( harvester.GetHealth() == 0 )
     {
         SetWinner( enemyTeam )
@@ -1843,3 +1855,66 @@ void function UpdateHarvesterHealth( int team )
 ///////////////////////////////////
 ///// HARVESTER FUNCTIONS END /////
 ///////////////////////////////////
+
+
+void function InitPlayerObjective()
+{
+    foreach( player in GetPlayerArray() )
+    {
+        player.s.shouldcallTF <- true
+        player.SetPlayerNetInt( "gameInfoStatusText" , 100 )//EARN
+    }
+    thread CheckTitanAvaiable()
+}
+
+
+
+
+void function CheckTitanAvaiable()
+{
+    while( true )
+    {
+        foreach( player in GetPlayerArray() )
+        {
+            //bool shouldcallTF = expect bool( player.s.shouldcallTF )
+            if ( IsValid( GetBatteryOnBack( player ) ) )
+            {
+                if ( player.GetPlayerNetInt( "gameInfoStatusText" ) != 96 )// must becuz we need continue the loop
+                    player.SetPlayerNetInt( "gameInfoStatusText" , 96 ) //USE_BATTERY
+                continue
+            }
+            if ( IsTitanAvailable( player ) && player.s.shouldcallTF == true )
+            {
+                SetObjective( player , 101 ) //TITANFALL
+                player.s.shouldcallTF = false
+            }
+            if ( IsValid( player.GetPetTitan() ) && player.GetPlayerNetInt( "gameInfoStatusText" ) != 102 )
+            {
+                player.SetPlayerNetInt( "gameInfoStatusText" , 102 ) //EMBARK
+            }
+        }
+        WaitFrame()
+    }
+}
+
+void function SetObjective( entity player , int stringid )
+{
+    Remote_CallFunction_NonReplay( player , "ServerCallback_FW_SetObjective" , stringid )
+    player.SetPlayerNetInt( "gameInfoStatusText" , stringid )
+}
+
+void function SetTitanEarnObjective( entity player ,entity titan )
+{
+    SetObjective( player , 103 )//ATTACK
+}
+
+void function SetPilotEarnObjective( entity player ,entity titan )
+{
+    if( titan.GetTitanSoul().IsEjecting() )
+    {
+        SetObjective( player , 100  )//EARN
+        player.s.shouldcallTF = true
+    }
+    else
+        player.SetPlayerNetInt( "gameInfoStatusText" , 102 )//EMBARK
+}
