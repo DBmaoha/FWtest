@@ -18,7 +18,8 @@ const array<string> FW_ALLOWED_MAPS =
 global function FW_ReplaceMegaTurret
 
 // fw specific titanfalls
-global function FW_PlayerInFriendlyTerritory
+global function FW_IsPlayerInFriendlyTerritory
+global function FW_IsPlayerInEnemyTerritory
 global function FW_ReCalculateTitanReplacementPoint
 
 // default havester settings
@@ -27,6 +28,8 @@ const int FW_DEFAULT_HARVESTER_SHIELD = 5000
 // default turret settings
 const int FW_DEFAULT_TURRET_HEALTH = 12500
 const int FW_DEFAULT_TURRET_SHIELD = 4000
+// you need to deal this much damage to trigger "FortWarTowerDamage" score event
+const int FW_HARVESTER_DAMAGE_SEGMENT = 1500
 
 // basically needs to match "waves count - bosswaves count"
 const int FW_MAX_LEVELS = 3
@@ -56,7 +59,15 @@ const float FW_TURRET_DAMAGED_DEBOUNCE = 2.0
 global HarvesterStruct& fw_harvesterMlt
 global HarvesterStruct& fw_harvesterImc
 
-//array< HarvesterStruct& > harvesters = [ fw_harvesterMlt , fw_harvesterImc ]
+// these are not using respawn's remaining code( sh_gamemode_fw.nut )!
+
+// respawn already have a FW_TowerData struct! this struct is only for score events
+struct HarvesterDamageStruct
+{
+    float recentDamageTime
+    int storedDamage
+}
+
 struct TurretSiteStruct
 {
     entity site
@@ -65,7 +76,7 @@ struct TurretSiteStruct
     string turretflagid
 }
 
-// this is not using respawn's remaining codes!
+// respawn already have a FW_CampData, FW_WaveOrigin and FW_SpawnData struct!
 struct CampSiteStruct
 {
     entity camp
@@ -98,6 +109,12 @@ struct
 
     array<CampSiteStruct> fwCampSites
 
+    // respawn already have a FW_TowerData struct! this table is only for score events
+    table< entity, HarvesterDamageStruct > playerDamageHarvester // team, table< player, time >
+    
+    // this is for saving territory's connecting time, try not to make faction dialogues play together
+    table< int, float > teamTerrLastConnectTime // team, time
+
     array<entity> etitaninmlt
     array<entity> etitaninimc
 
@@ -116,21 +133,45 @@ void function GamemodeFW_Init()
     AddCallback_EntitiesDidLoad( LoadEntities )
     AddCallback_GameStateEnter( eGameState.Prematch, OnFWGamePrematch )
     AddCallback_GameStateEnter( eGameState.Playing, OnFWGamePlaying )
+    AddCallback_GameStateEnter( eGameState.Postmatch, OnFWGamePostmatch )
 
     AddSpawnCallback( "item_powerup", FWAddPowerUpIcon )
 
+    AddCallback_OnClientConnected( OnFWPlayerConnected )
+    AddCallback_OnPlayerKilled( OnFWPlayerKilled )
+    AddCallback_OnPilotBecomesTitan( OnFWPilotBecomesTitan )
+    AddCallback_OnTitanBecomesPilot( OnFWTitanBecomesPilot )
+
     ScoreEvent_SetupEarnMeterValuesForMixedModes()
 
-    ClassicMP_ForceDisableEpilogue( true ) // temp
+    // so many things in battle, this is required to avoid crash!
+    ServerCommand( "sv_max_props_multiplayer 200000" )
+    ServerCommand( "sv_max_prop_data_dwords_multiplayer 300000" )
 
-    // temp, force change maps
-    AddCallback_GameStateEnter( eGameState.Postmatch, FWForceChangeMap )
+    ClassicMP_ForceDisableEpilogue( true ) // temp
 }
 
 //////////////////////////
 ///// TEMP FUNCTIONS /////
 //////////////////////////
 
+// temp, in some maps( complex, grave ) npcs being cleaned up will fire outside of the map and crash the server
+void function FWForceCleanUp()
+{
+    foreach( entity player in GetPlayerArray() )
+    {
+        player.ClearParent() // so npcs won't have a player parented
+    }
+
+    foreach( entity npc in GetNPCArray() )
+    {
+        // this might able to get npcs cleaned safely
+        npc.ClearParent()
+        npc.Destroy()
+    }
+}
+
+// temp, force change maps, since i don't know how to use a playlist
 void function FWForceChangeMap()
 {
     thread FWForceChangeMap_Threaded()
@@ -223,6 +264,35 @@ void function OnFWGamePlaying()
     FWAreaThreatLevelThink()
     StartFWCampThink()
     InitTurretSettings()
+    FWPlayerObjectiveState()
+}
+
+void function OnFWGamePostmatch()
+{
+    FWForceCleanUp()
+    FWForceChangeMap()
+}
+
+void function OnFWPlayerConnected( entity player )
+{
+    InitFWPlayers( player )
+}
+
+void function OnFWPlayerKilled( entity victim, entity attacker, var damageInfo )
+{
+    HandleFWPlayerKilledScoreEvent( victim, attacker )
+}
+
+void function OnFWPilotBecomesTitan( entity player, entity titan )
+{
+    // objective stuff
+    SetTitanObjective( player, titan )
+}
+
+void function OnFWTitanBecomesPilot( entity player, entity titan )
+{
+    // objective stuff
+    SetPilotObjective( player, titan )
 }
 
 //////////////////////////////////
@@ -230,46 +300,209 @@ void function OnFWGamePlaying()
 //////////////////////////////////
 
 
-//////////////////////////////////
-///// SCORE EVENTS FUNCTIONS /////
-//////////////////////////////////
+/////////////////////////////////
+///// SCORE EVENT FUNCTIONS /////
+/////////////////////////////////
 
 void function InitFWScoreEvents()
 {
-    // current using scoreEvents
-    ScoreEvent_SetEarnMeterValues( "KillHeavyTurret", 0.0, 0.20 ) // only adds to titan's in this mode
+    // common scoreEvents
+    ScoreEvent_SetEarnMeterValues( "KillHeavyTurret", 0.0, 0.20 ) // can only adds to titan's in this mode
 
-    // save for later use of scoreEvents
-	ScoreEvent_SetEarnMeterValues( "FortWarAssault", 0.10, 0.15 )
-	ScoreEvent_SetEarnMeterValues( "FortWarDefense", 0.05, 0.10 )
-	ScoreEvent_SetEarnMeterValues( "FortWarPerimeterDefense", 0.05, 0.10 )
-	ScoreEvent_SetEarnMeterValues( "FortWarSiege", 0.1, 0.15 )
-	ScoreEvent_SetEarnMeterValues( "FortWarSnipe", 0.1, 0.15 )
-    ScoreEvent_SetEarnMeterValues( "FortWarBaseConstruction", 0.1, 0.15 )
-	ScoreEvent_SetEarnMeterValues( "FortWarForwardConstruction", 0.1, 0.15 )
-    ScoreEvent_SetEarnMeterValues( "FortWarInvasiveConstruction", 0.1, 0.15 )
-	ScoreEvent_SetEarnMeterValues( "FortWarResourceDenial", 0.1, 0.15 )
-    ScoreEvent_SetEarnMeterValues( "FortWarTowerDamage", 0.1, 0.15 )
-    ScoreEvent_SetEarnMeterValues( "FortWarTowerDefense", 0.1, 0.15 )
-    ScoreEvent_SetEarnMeterValues( "FortWarTeamTurretControlBonus_One", 0.1, 0.15 )
-    ScoreEvent_SetEarnMeterValues( "FortWarTeamTurretControlBonus_Two", 0.1, 0.15 )
-    ScoreEvent_SetEarnMeterValues( "FortWarTeamTurretControlBonus_Three", 0.1, 0.15 )
-    ScoreEvent_SetEarnMeterValues( "FortWarTeamTurretControlBonus_Four", 0.1, 0.15 )
-    ScoreEvent_SetEarnMeterValues( "FortWarTeamTurretControlBonus_Five", 0.1, 0.15 )
-    ScoreEvent_SetEarnMeterValues( "FortWarTeamTurretControlBonus_Six", 0.1, 0.15 )
-    ScoreEvent_SetEarnMeterValues( "FortWarSecuringGatheredResources", 0.1, 0.15 )
-    ScoreEvent_SetEarnMeterValues( "FortWarShieldDestroyed", 0.1, 0.15 )
+    // fw special: save for later use of scoreEvents
+
+    // combat
+	ScoreEvent_SetEarnMeterValues( "FortWarAssault", 0.0, 0.05, 0.0 ) // titans don't earn
+	ScoreEvent_SetEarnMeterValues( "FortWarDefense", 0.0, 0.05, 0.0 ) // titans don't earn
+	ScoreEvent_SetEarnMeterValues( "FortWarPerimeterDefense", 0.0, 0.05 ) // unused
+	ScoreEvent_SetEarnMeterValues( "FortWarSiege", 0.0, 0.05 ) // unused
+	ScoreEvent_SetEarnMeterValues( "FortWarSnipe", 0.0, 0.05 ) // unused
+
+    // constructions
+    ScoreEvent_SetEarnMeterValues( "FortWarBaseConstruction", 0.0, 0.25 )
+	ScoreEvent_SetEarnMeterValues( "FortWarForwardConstruction", 0.0, 0.25 )
+    ScoreEvent_SetEarnMeterValues( "FortWarInvasiveConstruction", 0.0, 0.25 ) // unused
+	ScoreEvent_SetEarnMeterValues( "FortWarResourceDenial", 0.0, 0.05 ) // unused
+    ScoreEvent_SetEarnMeterValues( "FortWarSecuringGatheredResources", 0.0, 0.05 ) // unused
+
+    // tower
+    ScoreEvent_SetEarnMeterValues( "FortWarTowerDamage", 0.0, 0.10, 0.5 ) // using the const FW_HARVESTER_DAMAGE_SEGMENT
+    ScoreEvent_SetEarnMeterValues( "FortWarTowerDefense", 0.0, 0.10, 0.0 ) // titans don't earn
+    ScoreEvent_SetEarnMeterValues( "FortWarShieldDestroyed", 0.0, 0.15 )
+
+    // turrets
+    ScoreEvent_SetEarnMeterValues( "FortWarTeamTurretControlBonus_One", 0.0, 0.15, 0.5 ) // give more meter if no turret left
+    ScoreEvent_SetEarnMeterValues( "FortWarTeamTurretControlBonus_Two", 0.0, 0.15, 0.5 )
+    ScoreEvent_SetEarnMeterValues( "FortWarTeamTurretControlBonus_Three", 0.0, 0.10, 0.5 )
+    ScoreEvent_SetEarnMeterValues( "FortWarTeamTurretControlBonus_Four", 0.0, 0.10, 0.5 ) // give less meter if controlled most turrets
+    ScoreEvent_SetEarnMeterValues( "FortWarTeamTurretControlBonus_Five", 0.0, 0.05, 0.5 )
+    ScoreEvent_SetEarnMeterValues( "FortWarTeamTurretControlBonus_Six", 0.0, 0.05, 0.5 )
 }
 
+// consider this means victim recently damaged harvester
+const float FW_DEFENSE_REQURED_TIME = 10.0
+
+void function HandleFWPlayerKilledScoreEvent( entity victim, entity attacker )
+{
+    // this function only handles player's kills
+    if( !attacker.IsPlayer() )
+        return
+    
+    // suicide don't get scores
+    if( attacker == victim )
+        return
+
+    int attackerTeam = attacker.GetTeam()
+    int victimTeam = victim.GetTeam()
+
+    string scoreEvent = ""
+    int secondaryScore = 0
+    entity attackerHarvester = FW_GetTeamHarvesterProp( attackerTeam )
+
+    if( FW_IsPlayerInEnemyTerritory( victim ) ) // victim is in enemy territory
+    {
+        scoreEvent = "FortWarDefense" // enemy earn score from defense
+        secondaryScore = POINTVALUE_FW_DEFENSE
+    }
+
+    if( FW_IsPlayerInFriendlyTerritory( victim ) ) // victim is in friendly territory
+    {
+        scoreEvent = "FortWarAssault" // enemy earn score from assault
+        secondaryScore = POINTVALUE_FW_ASSAULT
+    }
+
+    if( victim in file.playerDamageHarvester ) // victim has damaged the harvester this life
+    {    
+        float damageTime = file.playerDamageHarvester[ victim ].recentDamageTime
+
+        // is victim recently damaged havester?
+        if( damageTime <= Time() + FW_DEFENSE_REQURED_TIME )
+        {
+            scoreEvent = "FortWarTowerDefense" // you defend the tower!
+            secondaryScore = POINTVALUE_FW_TOWER_DEFENSE
+        }
+
+    }
+
+    if( scoreEvent != "" )
+    {
+        AddPlayerScore( attacker, scoreEvent, victim )
+        attacker.AddToPlayerGameStat( PGS_DEFENSE_SCORE, secondaryScore )
+    }
+}
+
+/////////////////////////////////////
+///// SCORE EVENT FUNCTIONS END /////
+/////////////////////////////////////
+
+
+
 //////////////////////////////////////
-///// SCORE EVENTS FUNCTIONS END /////
+///// FACTION DIALOGUE FUNCTIONS /////
 //////////////////////////////////////
 
+const float FW_TERRYTORY_DIALOGUE_DEBOUNCE = 5.0
+
+// WORKING IN PROGRESS
+bool function TryFWTerritoryDialogue( entity territory, entity player )
+{
+    bool thisTimeIsTitan = player.IsTitan()
+    int terrTeam = territory.GetTeam()
+    int enemyTeam = GetOtherTeam( terrTeam )
+    bool sameTeam = terrTeam == player.GetTeam()
+    bool isInDebounce = file.teamTerrLastConnectTime[ terrTeam ] + FW_TERRYTORY_DIALOGUE_DEBOUNCE >= Time()
+
+    // the territory trigger will only save players and titans
+    array<entity> allEntsInside = GetAllEntitiesInTrigger( territory )
+    allEntsInside.removebyvalue( null ) // since we're using a fake trigger, need to check this
+    array<entity> friendliesInside // this means territory's friendly team
+    array<entity> enemiesInside // this means territory's enemy team
+    array<entity> enemyTitansInside
+    foreach( entity ent in allEntsInside )
+    {
+        if( !IsValid( ent ) ) // since we're using a fake trigger, need to check this
+            continue
+        if( ent.GetTeam() == terrTeam )
+            friendliesInside.append( ent )
+    }
+    foreach( entity ent in allEntsInside )
+    {
+        if( !IsValid( ent ) ) // since we're using a fake trigger, need to check this
+            continue
+        if( ent.GetTeam() != terrTeam )
+            enemiesInside.append( ent )
+    }
+    foreach( entity enemy in enemiesInside )
+    {
+        if( !IsValid( enemy ) ) // since we're using a fake trigger, need to check this
+            continue
+        if( enemy.IsTitan() )
+            enemyTitansInside.append( enemy )
+    }
+
+    print( "enemy in territory: " + string( enemiesInside.len() ) )
+    print( "friendly in territory: " + string( friendliesInside.len() ) )
+
+    print( "sameTeam: " + string( sameTeam ) )
+    print( "isInDebounce: " + string( isInDebounce ) )
+    print( "thisTimeIsTitan: " + string( thisTimeIsTitan ) )
+
+    if( enemiesInside.len() > 3 || friendliesInside.len() > 1 ) // already have some players triggered dialogue
+        return false
+
+    // notify player enemy's behaves
+    if( !sameTeam ) // player is not the same team as territory
+    {
+        // consider this means all enemies has left friendly territory, should use a debounce
+        if( enemiesInside.len() == 0 && !isInDebounce )
+        {
+            PlayFactionDialogueToTeam( "fortwar_terEnemyExpelled", terrTeam )
+            return true
+        }
+        // has more than 3 titans inside including new one, ignores debounce
+        else if( enemyTitansInside.len() >= 3 && thisTimeIsTitan )
+        {
+            PlayFactionDialogueToTeam( "fortwar_terPresentEnemyTitans", terrTeam )
+            return true
+        }
+        // only the player inside terrytory
+        else if( enemyTitansInside.len() == 1 )
+        {
+            // entered territory as titan, ignores debounce
+            if( thisTimeIsTitan )
+            {
+                PlayFactionDialogueToTeam( "fortwar_terEnteredEnemyPilot", terrTeam )
+                return true
+            }
+            // entered territory as pilot
+            else if( !isInDebounce )
+            {
+                PlayFactionDialogueToTeam( "fortwar_terEnteredEnemyPilot", terrTeam )
+                return true
+            }
+        }
+
+        // notify player friendly's behaves
+        // consider this means all friendlies has left enemy territory
+        if( friendliesInside.len() == 0 && !sameTeam && !isInDebounce )
+        {
+            PlayFactionDialogueToTeam( "fortwar_terFriendlyExpelled", terrTeam )
+            return true
+        }
+    }
+
+    return false
+}
+
+//////////////////////////////////////////
+///// FACTION DIALOGUE FUNCTIONS END /////
+//////////////////////////////////////////
 
 
-////////////////////////////////
-///// INITIALIZE FUNCTIONS /////
-////////////////////////////////
+
+/////////////////////////////////////////
+///// GAMEMODE INITIALIZE FUNCTIONS /////
+/////////////////////////////////////////
 
 void function LoadEntities()
 {
@@ -281,21 +514,18 @@ void function LoadEntities()
 			switch( info_target.kv.editorclass )
 			{
 				case "info_fw_team_tower":
-                    if ( info_target.GetTeam() == TEAM_MILITIA )
-                    {
-                        //entity prop = CreatePropDynamic( info_target.GetModelName(), info_target.GetOrigin(), info_target.GetAngles(), 6 )
-					    file.harvesterMlt_info = info_target
-                        //print("fw_tower tracker spawned")
-                    }
                     if ( info_target.GetTeam() == TEAM_IMC )
                     {
-                        //entity prop = CreatePropDynamic( info_target.GetModelName(), info_target.GetOrigin(), info_target.GetAngles(), 6 )
 					    file.harvesterImc_info = info_target
+                        //print("fw_tower tracker spawned")
+                    }
+                    if ( info_target.GetTeam() == TEAM_MILITIA )
+                    {
+					    file.harvesterMlt_info = info_target
                         //print("fw_tower tracker spawned")
                     }
                     break
                 case "info_fw_camp":
-                    //entity prop = CreatePropDynamic( info_target.GetModelName(), info_target.GetOrigin(), info_target.GetAngles(), 6 )
                     InitCampTracker( info_target )
                     //print("fw_camp spawned")
                     break
@@ -342,7 +572,7 @@ void function LoadEntities()
 
                     turretsite.minimapstate = minimapstate
                     turret.s.minimapstate = minimapstate
-                    
+
                     break
 			}
 		}
@@ -356,10 +586,10 @@ void function LoadEntities()
 			switch( script_ref.kv.editorclass )
 			{
                 case "info_fw_foundation_plate":
-                    entity prop = CreatePropDynamic( script_ref.GetModelName(), script_ref.GetOrigin(), script_ref.GetAngles(), 6 )
+                    entity prop = CreatePropScript( script_ref.GetModelName(), script_ref.GetOrigin(), script_ref.GetAngles(), 6 )
                     break
                 case "info_fw_battery_port":
-                    entity prop = CreatePropDynamic( script_ref.GetModelName(), script_ref.GetOrigin(), script_ref.GetAngles(), 6 )
+                    entity prop = CreatePropScript( script_ref.GetModelName(), script_ref.GetOrigin(), script_ref.GetAngles(), 6 )
                     prop.kv.fadedist = 10000 // try not to fade
                     InitTurretBatteryPort( prop )
                     break
@@ -417,9 +647,28 @@ void function InitCampSpawnerLevel() // can edit this to make more spawns, alert
     file.fwNpcLevel[2] <- campSpawnLv3
 }
 
-////////////////////////////////////
-///// INITIALIZE FUNCTIONS END /////
-////////////////////////////////////
+/////////////////////////////////////////////
+///// GAMEMODE INITIALIZE FUNCTIONS END /////
+/////////////////////////////////////////////
+
+
+
+///////////////////////////////////////
+///// PLAYER INITIALIZE FUNCTIONS /////
+///////////////////////////////////////
+
+void function InitFWPlayers( entity player )
+{
+    HarvesterDamageStruct emptyStruct
+    file.playerDamageHarvester[ player ] <- emptyStruct
+
+    // objective stuff
+    player.s.notifiedTitanfall <- false
+}
+
+///////////////////////////////////////////
+///// PLAYER INITIALIZE FUNCTIONS END /////
+///////////////////////////////////////////
 
 
 
@@ -736,52 +985,67 @@ void function FW_WaitToUntrackNPC( entity guy, string campId, string aiType )
 
 void function SetupFWTerritoryTrigger( entity trigger )
 {
-    /*foreach( trigger in GetEntArrayByClass_Expensive( "trigger_multiple" ) )
-    {
-        switch( trigger.kv.editorclass )
-		{
-			case "trigger_fw_territory":
-                print("trigger_fw_territory detected")
-                trigger.ConnectOutput( "OnStartTouch", EntityEnterFWTrig )
-	            trigger.ConnectOutput( "OnEndTouch", EntityLeaveFWTrig )
-                break
-		}
-    }*/
     //print("trigger_fw_territory detected")
     file.fwTerritories.append( trigger )
     trigger.ConnectOutput( "OnStartTouch", EntityEnterFWTrig )
 	trigger.ConnectOutput( "OnEndTouch", EntityLeaveFWTrig )
 
-    // respawn didn't leave a key for trigger's team, let's set it.
+    // respawn didn't leave a key for trigger's team, let's set it manually.
     if( Distance( trigger.GetOrigin(), file.harvesterMlt_info.GetOrigin() ) > Distance( trigger.GetOrigin(), file.harvesterImc_info.GetOrigin() ) )
         SetTeam( trigger, TEAM_IMC )
     else
         SetTeam( trigger, TEAM_MILITIA )
+
+    // init
+    file.teamTerrLastConnectTime[ trigger.GetTeam() ] <- 0.0
+
+    thread FWTerritoryTriggerThink( trigger )
+}
+
+// since we're using a trigger_multiple, needs this to remove invalid keys
+void function FWTerritoryTriggerThink( entity trigger )
+{
+    trigger.EndSignal( "OnDestroy" )
+
+    while( true )
+    {
+        if( null in trigger.e.scriptTriggerData.entities )
+            delete trigger.e.scriptTriggerData.entities[ null ]
+        WaitFrame()
+    }
 }
 
 void function EntityEnterFWTrig( entity trigger, entity ent, entity caller, var value )
 {
     if( !IsValid( ent ) ) // post-spawns
         return
-    if( !ent.IsPlayer() && !ent.IsNPC() ) // no neet to add props i guess
+    if( !ent.IsPlayer() && !ent.IsTitan() ) // no neet to add props and grunts i guess
         return
     // functions that trigger_multiple missing
     if( IsValid( ent ) )
     {
         ScriptTriggerAddEntity( trigger, ent )
         thread ScriptTriggerPlayerDisconnectThink( trigger, ent )
+        //TryFWTerritoryDialogue( trigger, ent ) // WIP
+        file.teamTerrLastConnectTime[ trigger.GetTeam() ] = Time()
     }
 
     if( !IsValid(ent) )
         return
     if ( ent.IsPlayer() ) // notifications for player
     {
-        MessageToPlayer( ent, eEventNotifications.Clear ) // clean up
+        MessageToPlayer( ent, eEventNotifications.Clear ) // clean up last message
         bool sameTeam = ent.GetTeam() == trigger.GetTeam()
         if ( sameTeam )
+        {
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyEnterFriendlyArea" )
+            ent.SetPlayerNetInt( "indicatorId", 1 ) // 1 means "FRIENDLY TERRITORY"
+        }
         else
+        {
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyEnterEnemyArea" )
+            ent.SetPlayerNetInt( "indicatorId", 2 ) // 2 means "ENEMY TERRITORY"
+        }
     }
 }
 
@@ -789,13 +1053,17 @@ void function EntityLeaveFWTrig( entity trigger, entity ent, entity caller, var 
 {
     if( !IsValid( ent ) ) // post-spawns
         return
-    if( !ent.IsPlayer() && !ent.IsNPC() ) // no neet to remove props i guess
+    if( !ent.IsPlayer() && !ent.IsTitan() ) // no neet to add props and grunts i guess
         return
     // functions that trigger_multiple missing
     if( IsValid( ent ) )
     {
         if( ent in trigger.e.scriptTriggerData.entities ) // need to check this!
+        {
             ScriptTriggerRemoveEntity( trigger, ent )
+            //TryFWTerritoryDialogue( trigger, ent ) // WIP
+            file.teamTerrLastConnectTime[ trigger.GetTeam() ] = Time()
+        }
     }
 
     if( !IsValid(ent) )
@@ -808,15 +1076,30 @@ void function EntityLeaveFWTrig( entity trigger, entity ent, entity caller, var 
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyExitFriendlyArea" )
         else
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyExitEnemyArea" )
+        ent.SetPlayerNetInt( "indicatorId", 4 ) // 4 means "NO MAN'S LAND"
     }
 }
 
 // globlized!
-bool function FW_PlayerInFriendlyTerritory( entity player )
+bool function FW_IsPlayerInFriendlyTerritory( entity player )
 {
     foreach( entity trigger in file.fwTerritories )
     {
         if( trigger.GetTeam() == player.GetTeam() ) // is it friendly one?
+        {
+            if( GetAllEntitiesInTrigger( trigger ).contains( player ) ) // is player inside?
+                return true
+        }
+    }
+    return false // can't find the player
+}
+
+// globlized!
+bool function FW_IsPlayerInEnemyTerritory( entity player )
+{
+    foreach( entity trigger in file.fwTerritories )
+    {
+        if( trigger.GetTeam() != player.GetTeam() ) // is it enemy one?
         {
             if( GetAllEntitiesInTrigger( trigger ).contains( player ) ) // is player inside?
                 return true
@@ -837,19 +1120,13 @@ bool function FW_PlayerInFriendlyTerritory( entity player )
 
 // territory trigger don't have a kv.radius, let's use a const
 // 1800 will pretty much get harvester's near titan startpoints
-const float FW_SPAWNPOINT_SEARCH_RADIUS = 1800
+const float FW_SPAWNPOINT_SEARCH_RADIUS = 1800.0
 
 // globalized!
 vector function FW_ReCalculateTitanReplacementPoint( vector baseOrigin, int team )
 {
-    entity teamHarvester
     // find team's harvester
-    if( team == TEAM_IMC )
-        teamHarvester = fw_harvesterImc.harvester
-    else if( team == TEAM_MILITIA )
-        teamHarvester = fw_harvesterMlt.harvester
-    else
-        unreachable // crash the game
+    entity teamHarvester = FW_GetTeamHarvesterProp( team )
 
     if( Distance2D( baseOrigin, teamHarvester.GetOrigin() ) <= FW_SPAWNPOINT_SEARCH_RADIUS ) // close enough!
         return baseOrigin // this origin is good enough
@@ -863,14 +1140,8 @@ vector function FW_ReCalculateTitanReplacementPoint( vector baseOrigin, int team
 array<entity> function FW_GetTitanSpawnPointsForTeam( int team )
 {
     array<entity> validSpawnPoints
-    entity teamHarvester
     // find team's harvester
-    if( team == TEAM_IMC )
-        teamHarvester = fw_harvesterImc.harvester
-    else if( team == TEAM_MILITIA )
-        teamHarvester = fw_harvesterMlt.harvester
-    else
-        unreachable // crash the game
+    entity teamHarvester = FW_GetTeamHarvesterProp( team )
 
     array<entity> allPoints
     // same as _replacement_titans_drop.gnut does
@@ -971,28 +1242,28 @@ void function FWAreaThreatLevelThink_Threaded()
         // check threats
         array<entity> imcEntArray = GetAllEntitiesInTrigger( imcTerritory )
         array<entity> mltEntArray = GetAllEntitiesInTrigger( mltTerritory )
+        imcEntArray.removebyvalue( null ) // since we're using a fake trigger, need to check this
+        mltEntArray.removebyvalue( null )
         foreach( entity ent in imcEntArray )
         {
             //print( ent )
-            if( IsValid( ent ) ) // since we're using a fake trigger, good to have this
+            if( !IsValid( ent ) ) // since we're using a fake trigger, need to check this
+                continue
+            if( ent.IsPlayer() || ent.IsNPC() )
             {
-                if( ent.IsPlayer() || ent.IsNPC() )
-                {
-                    if( ent.IsTitan() && ent.GetTeam() != TEAM_IMC )
-                        warnImcTitanInArea = true
-                }
+                if( ent.IsTitan() && ent.GetTeam() != TEAM_IMC )
+                    warnImcTitanInArea = true
             }
         }
         foreach( entity ent in mltEntArray )
         {
             //print( ent )
-            if( IsValid( ent ) ) // since we're using a fake trigger, good to have this
+            if( !IsValid( ent ) ) // since we're using a fake trigger, need to check this
+                continue
+            if( ent.IsPlayer() || ent.IsNPC() )
             {
-                if( ent.IsPlayer() || ent.IsNPC() )
-                {
-                    if( ent.IsTitan() && ent.GetTeam() != TEAM_MILITIA )
-                        warnMltTitanInArea = true
-                }
+                if( ent.IsTitan() && ent.GetTeam() != TEAM_MILITIA )
+                    warnMltTitanInArea = true
             }
         }
 
@@ -1081,7 +1352,7 @@ void function OnMegaTurretDamaged( entity turret, var damageInfo )
         {
             if( attacker.IsPlayer() && attacker.GetTeam() != turret.GetTeam() ) // good to have
                 MessageToPlayer( attacker, eEventNotifications.TurretTitanDamageOnly )
-            DamageInfo_SetDamage( damageInfo, turret.GetShieldHealth() )
+            DamageInfo_SetDamage( damageInfo, turret.GetShieldHealth() ) // destroy shields
             return
         }
     }
@@ -1089,11 +1360,12 @@ void function OnMegaTurretDamaged( entity turret, var damageInfo )
     // successfully damaged turret
     turret.s.lastDamagedTime = Time()
 
-    if ( damageSourceID == eDamageSourceId.mp_titanweapon_meteor_thermite || 
+    if ( damageSourceID == eDamageSourceId.mp_titanweapon_heat_shield ||
+        damageSourceID == eDamageSourceId.mp_titanweapon_meteor_thermite ||
         damageSourceID == eDamageSourceId.mp_titanweapon_flame_wall ||
         damageSourceID == eDamageSourceId.mp_titanability_slow_trap ||
         damageSourceID == eDamageSourceId.mp_titancore_flame_wave_secondary
-    )
+    ) // scorch's thermite damages
         DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/2 ) // nerf scorch
 }
 
@@ -1111,13 +1383,13 @@ void function InitTurretSettings()
         int stateFlag = 1 // netural
 
         // spawn with teamNumber?
-        if( team == TEAM_IMC || team == TEAM_MILITIA ) 
+        if( team == TEAM_IMC || team == TEAM_MILITIA )
             turret.s.baseTurret = true
 
         //SetTeam( minimapstate, team ) // setTeam() for icons is done in TurretStateWatcher()
         SetTeam( turret, team )
 
-        //print( "Try to set globatNetEnt: " + "turretSite" + idString )   
+        //print( "Try to set globatNetEnt: " + "turretSite" + idString )
 
         turret.s.turretflagid = idString
         turretSite.turretflagid = idString
@@ -1153,7 +1425,7 @@ const int TURRET_SHIELDED_MLT_FLAG = 13
 const int TURRET_UNDERATTACK_NEATURAL_FLAG = 16
 const int TURRET_UNDERATTACK_IMC_FLAG = 18
 const int TURRET_UNDERATTACK_MLT_FLAG = 20
-// neatural turret noramlly can't get shield
+// neatural turret noramlly can't get shielded
 const int TURRET_SHIELDED_UNDERATTACK_IMC_FLAG = 26
 const int TURRET_SHIELDED_UNDERATTACK_MLT_FLAG = 28
 
@@ -1186,6 +1458,9 @@ void function TurretStateWatcher( TurretSiteStruct turretSite )
     SetGlobalNetEnt( siteVarName, overlayState ) // tracking batteryPort's positions and team
     SetGlobalNetInt( stateVarName, TURRET_NEATURAL_FLAG ) // init for all turrets
 
+    int lastFrameTeam
+    bool lastFrameIsAlive
+
     while( true )
     {
         WaitFrame() // start of the loop
@@ -1196,8 +1471,13 @@ void function TurretStateWatcher( TurretSiteStruct turretSite )
             continue // skip the loop once
 
         bool isBaseTurret = expect bool( turret.s.baseTurret )
+        int turretTeam = turret.GetTeam()
+        bool turretAlive = IsAlive( turret )
 
-        if( !IsAlive( turret ) ) // turret down, waiting to be repaired
+        bool changedTeamThisFrame = lastFrameTeam != turretTeam // turret has changed team?
+        bool killedThisFrame = lastFrameIsAlive != turretAlive // turret has no health left?
+
+        if( !turretAlive ) // turret down, waiting to be repaired
         {
             if( !isBaseTurret ) // never reset base turret's team
             {
@@ -1206,11 +1486,16 @@ void function TurretStateWatcher( TurretSiteStruct turretSite )
                 SetTeam( batteryPort, TEAM_UNASSIGNED )
                 SetTeam( overlayState, TEAM_UNASSIGNED )
             }
+            if( killedThisFrame )
+                PlayFactionDialogueToTeam( "fortwar_turretDestroyedFriendly", turretTeam )
             SetGlobalNetInt( stateVarName, TURRET_DESTROYED_FLAG )
             continue
         }
-        
-        int turretTeam = turret.GetTeam()
+
+        // wrong dialogue, it will say "The turret you requested is on the way"
+        //if( changedTeamThisFrame ) // has been hacked!
+        //    PlayFactionDialogueToTeam( "fortwar_turretDeployFriendly", turretTeam )
+
         int iconTeam = turretTeam == TEAM_BOTH ? TEAM_UNASSIGNED : turretTeam // specific check
         SetTeam( mapIcon, iconTeam ) // update icon's team
         SetTeam( batteryPort, turretTeam ) // update batteryPort's team
@@ -1228,6 +1513,12 @@ void function TurretStateWatcher( TurretSiteStruct turretSite )
                     stateFlag = TURRET_SHIELDED_UNDERATTACK_IMC_FLAG
                 else
                     stateFlag = TURRET_UNDERATTACK_IMC_FLAG
+
+                // these dialogue have 30s debounce inside
+                if( isBaseTurret )
+                    PlayFactionDialogueToTeam( "fortwar_baseTurretsUnderAttack", TEAM_IMC )
+                else
+                    PlayFactionDialogueToTeam( "fortwar_awayTurretsUnderAttack", TEAM_IMC )
             }
             else if( turret.GetShieldHealth() > 0 ) // has shields left
                 stateFlag = TURRET_SHIELDED_IMC_FLAG
@@ -1244,13 +1535,19 @@ void function TurretStateWatcher( TurretSiteStruct turretSite )
                     stateFlag = TURRET_SHIELDED_UNDERATTACK_MLT_FLAG
                 else
                     stateFlag = TURRET_UNDERATTACK_MLT_FLAG
+
+                // these dialogue have 30s debounce inside
+                if( isBaseTurret )
+                    PlayFactionDialogueToTeam( "fortwar_baseTurretsUnderAttack", TEAM_MILITIA )
+                else
+                    PlayFactionDialogueToTeam( "fortwar_awayTurretsUnderAttack", TEAM_MILITIA )
             }
             else if( turret.GetShieldHealth() > 0 ) // has shields left
                 stateFlag = TURRET_SHIELDED_MLT_FLAG
             else
                 stateFlag = TURRET_MLT_FLAG
         }
-        
+
         // neatural states
         if( iconTeam == TEAM_UNASSIGNED )
         {
@@ -1261,6 +1558,10 @@ void function TurretStateWatcher( TurretSiteStruct turretSite )
         }
 
         SetGlobalNetInt( stateVarName, stateFlag )
+
+        // update these
+        lastFrameTeam = turretTeam
+        lastFrameIsAlive = turretAlive
 
         WaitFrame()
     }
@@ -1279,28 +1580,28 @@ void function TurretStateWatcher( TurretSiteStruct turretSite )
 
 void function startFWHarvester()
 {
-    thread HarvesterThink(fw_harvesterMlt)
-	thread HarvesterAlarm(fw_harvesterMlt)
     thread HarvesterThink(fw_harvesterImc)
 	thread HarvesterAlarm(fw_harvesterImc)
     thread UpdateHarvesterHealth( TEAM_IMC )
+
+    thread HarvesterThink(fw_harvesterMlt)
+	thread HarvesterAlarm(fw_harvesterMlt)
     thread UpdateHarvesterHealth( TEAM_MILITIA )
+}
+
+entity function FW_GetTeamHarvesterProp( int team )
+{
+    if( team == TEAM_IMC )
+        return fw_harvesterImc.harvester
+    else if( team == TEAM_MILITIA )
+        return fw_harvesterMlt.harvester
+
+    unreachable // crash the game
 }
 
 void function FW_createHarvester()
 {
-	fw_harvesterMlt = SpawnHarvester( file.harvesterMlt_info.GetOrigin(), file.harvesterMlt_info.GetAngles(), GetCurrentPlaylistVarInt( "fd_harvester_health", FW_DEFAULT_HARVESTER_HEALTH ), GetCurrentPlaylistVarInt( "fd_harvester_shield", FW_DEFAULT_HARVESTER_SHIELD ), TEAM_MILITIA )
-    fw_harvesterMlt.harvester.Minimap_SetAlignUpright( true )
-	fw_harvesterMlt.harvester.Minimap_AlwaysShow( TEAM_IMC, null )
-	fw_harvesterMlt.harvester.Minimap_AlwaysShow( TEAM_MILITIA, null )
-	fw_harvesterMlt.harvester.Minimap_SetHeightTracking( true )
-	fw_harvesterMlt.harvester.Minimap_SetZOrder( MINIMAP_Z_OBJECT )
-	fw_harvesterMlt.harvester.Minimap_SetCustomState( eMinimapObject_prop_script.FD_HARVESTER )
-	AddEntityCallback_OnDamaged( fw_harvesterMlt.harvester, OnHarvesterDamaged )
-    //Highlight_SetEnemyHighlight( fw_harvesterMlt.harvester, "fw_enemy" ) // fw's harvester needs this
-    // don't set this, or sonar pulse will try to find it and failed to set highlight
-    //fw_harvesterMlt.harvester.SetScriptName("fw_team_tower")
-
+    // mlt havester spawn
     fw_harvesterImc = SpawnHarvester( file.harvesterImc_info.GetOrigin(), file.harvesterImc_info.GetAngles(), GetCurrentPlaylistVarInt( "fd_harvester_health", FW_DEFAULT_HARVESTER_HEALTH ), GetCurrentPlaylistVarInt( "fd_harvester_shield", FW_DEFAULT_HARVESTER_SHIELD ), TEAM_IMC )
 	fw_harvesterImc.harvester.Minimap_SetAlignUpright( true )
 	fw_harvesterImc.harvester.Minimap_AlwaysShow( TEAM_IMC, null )
@@ -1309,26 +1610,42 @@ void function FW_createHarvester()
 	fw_harvesterImc.harvester.Minimap_SetZOrder( MINIMAP_Z_OBJECT )
 	fw_harvesterImc.harvester.Minimap_SetCustomState( eMinimapObject_prop_script.FD_HARVESTER )
     AddEntityCallback_OnDamaged( fw_harvesterImc.harvester, OnHarvesterDamaged )
-    //Highlight_SetEnemyHighlight( fw_harvesterMlt.harvester, "fw_enemy" ) // fw's harvester needs this
+
+    // imc havester settings
     // don't set this, or sonar pulse will try to find it and failed to set highlight
-    //fw_harvesterImc.harvester.SetScriptName("fw_team_tower")
-
-    file.harvesters.append(fw_harvesterMlt)
+    //fw_harvesterMlt.harvester.SetScriptName("fw_team_tower")
     file.harvesters.append(fw_harvesterImc)
-
-    entity trackerMlt = GetAvailableBaseLocationTracker()
-    trackerMlt.SetOwner( fw_harvesterMlt.harvester )
-    DispatchSpawn( trackerMlt )
     entity trackerImc = GetAvailableBaseLocationTracker()
     trackerImc.SetOwner( fw_harvesterImc.harvester )
     DispatchSpawn( trackerImc )
-    SetLocationTrackerRadius( trackerMlt , 65535 ) // whole map
-    SetLocationTrackerRadius( trackerImc , 65535 ) // whole map
+    SetLocationTrackerRadius( trackerImc, 1 ) // whole map
 
     // scores starts from 100, TeamScore means harvester health; TeamScore2 means shield bar
     GameRules_SetTeamScore( TEAM_MILITIA , 100 )
-    GameRules_SetTeamScore( TEAM_IMC , 100 )
     GameRules_SetTeamScore2( TEAM_MILITIA , 100 )
+
+
+    // mlt havester spawn
+    fw_harvesterMlt = SpawnHarvester( file.harvesterMlt_info.GetOrigin(), file.harvesterMlt_info.GetAngles(), GetCurrentPlaylistVarInt( "fd_harvester_health", FW_DEFAULT_HARVESTER_HEALTH ), GetCurrentPlaylistVarInt( "fd_harvester_shield", FW_DEFAULT_HARVESTER_SHIELD ), TEAM_MILITIA )
+    fw_harvesterMlt.harvester.Minimap_SetAlignUpright( true )
+	fw_harvesterMlt.harvester.Minimap_AlwaysShow( TEAM_IMC, null )
+	fw_harvesterMlt.harvester.Minimap_AlwaysShow( TEAM_MILITIA, null )
+	fw_harvesterMlt.harvester.Minimap_SetHeightTracking( true )
+	fw_harvesterMlt.harvester.Minimap_SetZOrder( MINIMAP_Z_OBJECT )
+	fw_harvesterMlt.harvester.Minimap_SetCustomState( eMinimapObject_prop_script.FD_HARVESTER )
+	AddEntityCallback_OnDamaged( fw_harvesterMlt.harvester, OnHarvesterDamaged )
+
+    // mlt havester settings
+    // don't set this, or sonar pulse will try to find it and failed to set highlight
+    //fw_harvesterImc.harvester.SetScriptName("fw_team_tower")
+    file.harvesters.append(fw_harvesterMlt)
+    entity trackerMlt = GetAvailableBaseLocationTracker()
+    trackerMlt.SetOwner( fw_harvesterMlt.harvester )
+    DispatchSpawn( trackerMlt )
+    SetLocationTrackerRadius( trackerMlt, 1 ) // whole map
+
+    // scores starts from 100, TeamScore means harvester health; TeamScore2 means shield bar
+    GameRules_SetTeamScore( TEAM_IMC , 100 )
     GameRules_SetTeamScore2( TEAM_IMC , 100 )
 }
 
@@ -1337,104 +1654,129 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
 	if ( !IsValid( harvester ) )
 		return
 
-    GameRules_SetTeamScore( harvester.GetTeam() , 1.0 * GetHealthFrac( harvester ) * 100 )
+	int friendlyTeam = harvester.GetTeam()
+	int enemyTeam = GetOtherTeam( friendlyTeam )
 
-    int damageSourceID = DamageInfo_GetDamageSourceIdentifier( damageInfo )
-    entity attacker = DamageInfo_GetAttacker( damageInfo )
-    float damageAmount = DamageInfo_GetDamage( damageInfo )
+	GameRules_SetTeamScore( friendlyTeam , 1.0 * GetHealthFrac( harvester ) * 100 )
 
-    if ( !damageSourceID && !damageAmount && !attacker ) // actually not dealing any damage?
-        return
+	int damageSourceID = DamageInfo_GetDamageSourceIdentifier( damageInfo )
+	entity attacker = DamageInfo_GetAttacker( damageInfo )
+	float damageAmount = DamageInfo_GetDamage( damageInfo )
 
-    // done damage adjustments here, since harvester prop's health is setting manually through damageAmount
-    if ( damageSourceID == eDamageSourceId.mp_titancore_laser_cannon )
-        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/100 ) // laser core shreds super well for some reason
+	if ( !damageSourceID && !damageAmount && !attacker ) // actually not dealing any damage?
+		return
 
-    if ( damageSourceID == eDamageSourceId.mp_titanweapon_flightcore_rockets )
-        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/4 ) // flight core shreds super well for some reason
+	// done damage adjustments here, since harvester prop's health is setting manually through damageAmount
+	if ( damageSourceID == eDamageSourceId.mp_titancore_laser_cannon )
+		DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/100 ) // laser core shreds super well for some reason
 
-    if ( damageSourceID == eDamageSourceId.mp_titanweapon_meteor_thermite || 
-        damageSourceID == eDamageSourceId.mp_titanweapon_flame_wall ||
-        damageSourceID == eDamageSourceId.mp_titanability_slow_trap ||
-        damageSourceID == eDamageSourceId.mp_titancore_flame_wave_secondary
-    ) // scorch's thermite damages
-        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/4 ) // nerf scorch
+	if ( damageSourceID == eDamageSourceId.mp_titanweapon_flightcore_rockets ||
+		damageSourceID == eDamageSourceId.mp_titanweapon_salvo_rockets ||
+		damageSourceID == eDamageSourceId.mp_titanweapon_shoulder_rockets ||
+		damageSourceID == eDamageSourceId.mp_titanweapon_dumbfire_rockets
+	) // titan missiles
+		DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/3 )
 
-    HarvesterStruct harvesterstruct // current harveter's struct
-    if( harvester.GetTeam() == TEAM_MILITIA )
-        harvesterstruct = fw_harvesterMlt
-    if( harvester.GetTeam() == TEAM_IMC )
-        harvesterstruct = fw_harvesterImc
+	if ( damageSourceID == eDamageSourceId.mp_titanweapon_meteor_thermite ||
+		damageSourceID == eDamageSourceId.mp_titanweapon_flame_wall ||
+		damageSourceID == eDamageSourceId.mp_titanability_slow_trap ||
+		damageSourceID == eDamageSourceId.mp_titancore_flame_wave_secondary
+	) // scorch's thermite damages
+		DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/4 ) // nerf scorch
 
-    if ( harvester.GetShieldHealth() - damageAmount <= 0 ) // this shot breaks shield
-    {
-        damageAmount = DamageInfo_GetDamage( damageInfo ) // get damageAmount again after all damage adjustments
+	HarvesterStruct harvesterstruct // current harveter's struct
+	if( friendlyTeam == TEAM_MILITIA )
+		harvesterstruct = fw_harvesterMlt
+	if( friendlyTeam == TEAM_IMC )
+		harvesterstruct = fw_harvesterImc
 
-        if ( !attacker.IsTitan() )
-        {
-            if( attacker.IsPlayer() )
-                Remote_CallFunction_NonReplay( attacker , "ServerCallback_FW_NotifyTitanRequired" )
-            DamageInfo_SetDamage( damageInfo, harvester.GetShieldHealth() )
-            damageAmount = 0 // never damage haveter's prop
+	if ( harvester.GetShieldHealth() - damageAmount <= 0 ) // this shot breaks shield
+	{
+		damageAmount = DamageInfo_GetDamage( damageInfo ) // get damageAmount again after all damage adjustments
+
+		if ( !attacker.IsTitan() )
+		{
+			if( attacker.IsPlayer() )
+				Remote_CallFunction_NonReplay( attacker , "ServerCallback_FW_NotifyTitanRequired" )
+			DamageInfo_SetDamage( damageInfo, harvester.GetShieldHealth() )
+			damageAmount = 0 // never damage haveter's prop
+		}
+
+		if( !harvesterstruct.harvesterShieldDown )
+		{
+			PlayFactionDialogueToTeam( "fortwar_baseShieldDownFriendly", friendlyTeam )
+			PlayFactionDialogueToTeam( "fortwar_baseShieldDownEnemy", enemyTeam )
+			harvesterstruct.harvesterShieldDown = true // prevent shield dialogues from repeating
         }
+
+		harvesterstruct.harvesterDamageTaken = harvesterstruct.harvesterDamageTaken + damageAmount // track damage for wave recaps
+		float newHealth = harvester.GetHealth() - damageAmount
+		float oldhealthpercent = ( ( harvester.GetHealth().tofloat() / harvester.GetMaxHealth() ) * 100 )
+		float healthpercent = ( ( newHealth / harvester.GetMaxHealth() ) * 100 )
+
+		if (healthpercent <= 75 && oldhealthpercent > 75) // we don't want the dialogue to keep saying "Harvester is below 75% health" everytime they take additional damage
+		{
+			PlayFactionDialogueToTeam( "fortwar_baseDmgFriendly75", friendlyTeam )
+			PlayFactionDialogueToTeam( "fortwar_baseDmgEnemy75", enemyTeam )
+		}
+
+		if (healthpercent <= 50 && oldhealthpercent > 50)
+		{
+			PlayFactionDialogueToTeam( "fortwar_baseDmgFriendly50", friendlyTeam )
+			PlayFactionDialogueToTeam( "fortwar_baseDmgEnemy50", enemyTeam )
+		}
+
+		if (healthpercent <= 25 && oldhealthpercent > 25)
+		{
+			PlayFactionDialogueToTeam( "fortwar_baseDmgFriendly25", friendlyTeam )
+			PlayFactionDialogueToTeam( "fortwar_baseDmgEnemy25", enemyTeam )
+		}
+
+		if( newHealth <= 0 )
+		{
+			EmitSoundAtPosition(TEAM_UNASSIGNED,harvesterstruct.harvester.GetOrigin(),"coop_generator_destroyed")
+			newHealth = 0
+			harvesterstruct.rings.Destroy()
+			harvesterstruct.harvester.Dissolve( ENTITY_DISSOLVE_CORE, Vector( 0, 0, 0 ), 500 )
+		}
+
+		harvester.SetHealth( newHealth )
+		harvesterstruct.havesterWasDamaged = true
+	}
+
+	if ( attacker.IsPlayer() )
+	{
+        // dialogue for enemy attackers
         if( !harvesterstruct.harvesterShieldDown )
+            PlayFactionDialogueToTeam( "fortwar_baseEnemyAllyAttacking", enemyTeam )
+
+		attacker.NotifyDidDamage( harvester, DamageInfo_GetHitBox( damageInfo ), DamageInfo_GetDamagePosition( damageInfo ), DamageInfo_GetCustomDamageType( damageInfo ), DamageInfo_GetDamage( damageInfo ), DamageInfo_GetDamageFlags( damageInfo ), DamageInfo_GetHitGroup( damageInfo ), DamageInfo_GetWeapon( damageInfo ), DamageInfo_GetDistFromAttackOrigin( damageInfo ) )
+
+        // get newest damage for adding score!
+        int scoreDamage = int( DamageInfo_GetDamage( damageInfo ) )
+        // score events
+        attacker.AddToPlayerGameStat( PGS_ASSAULT_SCORE, scoreDamage )
+        file.playerDamageHarvester[ attacker ].storedDamage += scoreDamage
+
+        // enough to earn score?
+        if( file.playerDamageHarvester[ attacker ].storedDamage >= FW_HARVESTER_DAMAGE_SEGMENT )
         {
-            PlayFactionDialogueToTeam( "fortwar_baseShieldDownFriendly", harvester.GetTeam() )
-            PlayFactionDialogueToTeam( "fortwar_baseShieldDownEnemy", GetOtherTeam(harvester.GetTeam()) )
-            harvesterstruct.harvesterShieldDown = true // prevent shield dialogues from repeating
+            AddPlayerScore( attacker, "FortWarTowerDamage", attacker )
+            attacker.AddToPlayerGameStat( PGS_DEFENSE_SCORE, POINTVALUE_FW_TOWER_DAMAGE )
+            file.playerDamageHarvester[ attacker ].storedDamage -= FW_HARVESTER_DAMAGE_SEGMENT // reset stored damage
         }
-        harvesterstruct.harvesterDamageTaken = harvesterstruct.harvesterDamageTaken + damageAmount // track damage for wave recaps
-        float newHealth = harvester.GetHealth() - damageAmount
-        float oldhealthpercent = ( ( harvester.GetHealth().tofloat() / harvester.GetMaxHealth() ) * 100 )
-        float healthpercent = ( ( newHealth / harvester.GetMaxHealth() ) * 100 )
+	}
 
-        if (healthpercent <= 75 && oldhealthpercent > 75) // we don't want the dialogue to keep saying "Harvester is below 75% health" everytime they take additional damage
-        {
-            PlayFactionDialogueToTeam( "fortwar_baseDmgFriendly75", harvester.GetTeam() )
-            PlayFactionDialogueToTeam( "fortwar_baseDmgEnemy75", GetOtherTeam(harvester.GetTeam()) )
-        }
-
-        if (healthpercent <= 50 && oldhealthpercent > 50)
-        {
-            PlayFactionDialogueToTeam( "fortwar_baseDmgFriendly50", harvester.GetTeam() )
-            PlayFactionDialogueToTeam( "fortwar_baseDmgEnemy50", GetOtherTeam(harvester.GetTeam()) )
-        }
-
-        if (healthpercent <= 25 && oldhealthpercent > 25)
-        {
-            PlayFactionDialogueToTeam( "fortwar_baseDmgFriendly25", harvester.GetTeam() )
-            PlayFactionDialogueToTeam( "fortwar_baseDmgEnemy25", GetOtherTeam(harvester.GetTeam()) )
-        }
-
-        if (healthpercent <= 10)
-        {
-            //PlayFactionDialogueToTeam( "fd_baseLowHealth", TEAM_MILITIA )
-        }
-
-        if( newHealth <= 0 )
-        {
-            EmitSoundAtPosition(TEAM_UNASSIGNED,harvesterstruct.harvester.GetOrigin(),"coop_generator_destroyed")
-            newHealth = 0
-            //PlayFactionDialogueToTeam( "fd_baseDeath", TEAM_MILITIA )
-            harvesterstruct.rings.Destroy()
-            harvesterstruct.harvester.Dissolve( ENTITY_DISSOLVE_CORE, Vector( 0, 0, 0 ), 500 )
-        }
-        harvester.SetHealth( newHealth )
-        harvesterstruct.havesterWasDamaged = true
-    }
-
-    if ( attacker.IsPlayer() )
-    {
-        attacker.NotifyDidDamage( harvester, DamageInfo_GetHitBox( damageInfo ), DamageInfo_GetDamagePosition( damageInfo ), DamageInfo_GetCustomDamageType( damageInfo ), DamageInfo_GetDamage( damageInfo ), DamageInfo_GetDamageFlags( damageInfo ), DamageInfo_GetHitGroup( damageInfo ), DamageInfo_GetWeapon( damageInfo ), DamageInfo_GetDistFromAttackOrigin( damageInfo ) )
-        //attacker.AddToPlayerGameStat( PGS_PILOT_KILLS, DamageInfo_GetDamage( damageInfo ) * 0.01 )
-    }
-
+    // always reset harvester's recharge delay
     harvesterstruct.lastDamage = Time()
+
     if ( harvester.GetHealth() == 0 )
     {
-        int winnerTeam = GetOtherTeam( harvester.GetTeam() )
-        SetWinner( winnerTeam )
-        GameRules_SetTeamScore( winnerTeam, 0 ) // force set score to 0( health 0% )
+        SetWinner( enemyTeam )
+        //PlayFactionDialogueToTeam( "scoring_wonMercy", enemyTeam )
+        //PlayFactionDialogueToTeam( "fortwar_matchLoss", friendlyTeam )
+        GameRules_SetTeamScore2( friendlyTeam, 0 ) // force set score2 to 0( shield bar will empty )
+        GameRules_SetTeamScore( friendlyTeam, 0 ) // force set score to 0( health 0% )
     }
 }
 
@@ -1481,8 +1823,6 @@ void function HarvesterThink( HarvesterStruct fd_harvester )
 			if( !IsValid( fd_harvester.particleShield ) )
 				generateShieldFX( fd_harvester )
 
-			//printt((currentTime-fd_harvester.lastDamage))
-
 			if( harvester.GetShieldHealth() == 0 )
 				EmitSoundOnEntity( harvester, "coop_generator_shieldrecharge_start" )
 
@@ -1490,10 +1830,6 @@ void function HarvesterThink( HarvesterStruct fd_harvester )
 			{
 				EmitSoundOnEntity( harvester, "coop_generator_shieldrecharge_resume" )
 				fd_harvester.harvesterShieldDown = false
-				//if (GetGlobalNetBool( "FD_waveActive" ) )
-					//PlayFactionDialogueToTeam( "fd_baseShieldRecharging", TEAM_MILITIA )
-				//else
-					//PlayFactionDialogueToTeam( "fd_baseShieldRechargingShort", TEAM_MILITIA )
 				isRegening = true
 			}
 
@@ -1504,8 +1840,7 @@ void function HarvesterThink( HarvesterStruct fd_harvester )
 				StopSoundOnEntity( harvester, "coop_generator_shieldrecharge_resume" )
 				harvester.SetShieldHealth( harvester.GetShieldHealthMax() )
 				EmitSoundOnEntity( harvester, "coop_generator_shieldrecharge_end" )
-				//if( GetGlobalNetBool( "FD_waveActive" ) )
-					//PlayFactionDialogueToTeam( "fd_baseShieldUp", TEAM_MILITIA )
+				PlayFactionDialogueToTeam( "fortwar_baseShieldUpFriendly", harvester.GetTeam() )
 				isRegening = false
 			}
 			else
@@ -1558,11 +1893,14 @@ void function UpdateHarvesterHealth( int team )
             GameRules_SetTeamScore2( team, 1.0 * harvester.GetShieldHealth() / harvester.GetShieldHealthMax() * 100 )
             WaitFrame()
         }
-        else
+        else // harvester down
         {
             int winnerTeam = GetOtherTeam(team)
             SetWinner( winnerTeam )
+            //PlayFactionDialogueToTeam( "scoring_wonMercy", winnerTeam )
+            //PlayFactionDialogueToTeam( "fortwar_matchLoss", team )
             GameRules_SetTeamScore2( team, 0 ) // force set score2 to 0( shield bar will empty )
+            GameRules_SetTeamScore( team, 0 ) // force set score to 0( health 0% )
             break
         }
     }
@@ -1571,3 +1909,89 @@ void function UpdateHarvesterHealth( int team )
 ///////////////////////////////////
 ///// HARVESTER FUNCTIONS END /////
 ///////////////////////////////////
+
+
+
+//////////////////////////////////////
+///// PLAYER OBJECTIVE FUNCTIONS /////
+//////////////////////////////////////
+
+const int APPLY_BATTERY_TEXT_INDEX = 96 // notify player to use batteries on turrets
+const int EARN_TITAN_TEXT_INDEX = 100 // notify player to earn titans
+const int CALL_IN_TITAN_TEXT_INDEX = 101 // notify player to call in titans in territory
+const int EMBARK_TITAN_TEXT_INDEX = 102 // notify player to embark titans
+const int ATTACK_HARVESTER_TEXT_INDEX = 103 // notify player to attack harvester
+
+void function FWPlayerObjectiveState()
+{
+    thread FWPlayerObjectiveState_Threaded()
+}
+
+void function FWPlayerObjectiveState_Threaded()
+{
+    while( GamePlayingOrSuddenDeath() )
+    {
+        foreach( player in GetPlayerArray() )
+        {
+            entity petTitan = player.GetPetTitan()
+            entity titanSoul
+            if( IsValid( petTitan ) )
+                titanSoul = petTitan.GetTitanSoul()
+
+            if ( IsValid( GetBatteryOnBack( player ) ) )
+                player.SetPlayerNetInt( "gameInfoStatusText", APPLY_BATTERY_TEXT_INDEX ) 
+            else if ( IsTitanAvailable( player ) )
+            {
+                if( !player.s.notifiedTitanfall ) // first notification, also do a objective announcement
+                {
+                    SetObjective( player, CALL_IN_TITAN_TEXT_INDEX )
+                    player.s.notifiedTitanfall = true
+                }
+                else
+                    player.SetPlayerNetInt( "gameInfoStatusText", CALL_IN_TITAN_TEXT_INDEX ) 
+            }
+            else if ( IsValid( petTitan ) )
+                player.SetPlayerNetInt( "gameInfoStatusText", EMBARK_TITAN_TEXT_INDEX )
+            else if ( IsAlive( player ) && !player.IsTitan() )
+                player.SetPlayerNetInt( "gameInfoStatusText", EARN_TITAN_TEXT_INDEX )
+            else if( !IsValid( titanSoul ) ) // titan died or player first embarked
+                player.s.notifiedTitanfall = false
+
+            if ( !IsAlive( player ) ) // don't show objetive for dying players
+                player.SetPlayerNetInt( "gameInfoStatusText", -1 )
+        }
+        WaitFrame()
+    }
+
+    // game entered other state, clean this
+    foreach( player in GetPlayerArray() )
+    {
+        player.SetPlayerNetInt( "gameInfoStatusText", -1 )
+    }
+}
+
+void function SetObjective( entity player, int stringid )
+{
+    Remote_CallFunction_NonReplay( player, "ServerCallback_FW_SetObjective", stringid )
+    player.SetPlayerNetInt( "gameInfoStatusText", stringid )
+}
+
+void function SetTitanObjective( entity player, entity titan )
+{
+    SetObjective( player, ATTACK_HARVESTER_TEXT_INDEX )
+}
+
+void function SetPilotObjective( entity player, entity titan )
+{
+    if( titan.GetTitanSoul().IsEjecting() ) // this time titan is ejecting
+    {
+        SetObjective( player, EARN_TITAN_TEXT_INDEX )
+        player.s.notifiedTitanfall = false
+    }
+    else
+        player.SetPlayerNetInt( "gameInfoStatusText", EMBARK_TITAN_TEXT_INDEX )
+}
+
+//////////////////////////////////////////
+///// PLAYER OBJECTIVE FUNCTIONS END /////
+//////////////////////////////////////////

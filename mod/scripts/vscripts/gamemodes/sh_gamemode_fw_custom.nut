@@ -19,8 +19,17 @@ void function CreateGamemodeFW()
 	GameMode_Create( FORT_WAR )
 	GameMode_SetName( FORT_WAR, "#GAMEMODE_fw" )
 	GameMode_SetDesc( FORT_WAR, "#PL_fw_desc" )
-	GameMode_SetGameModeAnnouncement( FORT_WAR, "fortwar_modeName" ) // fw lines are unfortunately not registered to faction dialogue
+
+	// fw lines are unfortunately not registered to faction dialogue, do it in gamemode script manually
+	GameMode_SetGameModeAnnouncement( FORT_WAR, "fortwar_modeName" ) 
 	
+	// waiting to be synced with client
+	//GameMode_AddScoreboardColumnData( FORT_WAR, "#SCOREBOARD_KILLS", PGS_KILLS, 2 )
+	//GameMode_AddScoreboardColumnData( FORT_WAR, "#SCOREBOARD_SUPPORT_SCORE", PGS_DEFENSE_SCORE, 4 )
+	//GameMode_AddScoreboardColumnData( FORT_WAR, "#SCOREBOARD_COOP_POINTS", PGS_ASSAULT_SCORE, 6 )
+
+	AddPrivateMatchMode( FORT_WAR )
+
 		#if SERVER
 			GameMode_AddServerInit( FORT_WAR, GamemodeFW_Init ) // doesn't exist yet lol
 			GameMode_SetPilotSpawnpointsRatingFunc( FORT_WAR, RateSpawnpoints_FW )
@@ -62,15 +71,15 @@ void function FWOnRegisteringNetworkVars()
 	RegisterNetworkedVariable( "milTowerThreatLevel", SNDC_GLOBAL, SNVT_INT )
 	RegisterNetworkedVariable( "fwCampAlertA", SNDC_GLOBAL, SNVT_INT )
 	RegisterNetworkedVariable( "fwCampStressA", SNDC_GLOBAL, SNVT_INT )
-	// can't use float rn
+	// waiting to be synced with client
 	//RegisterNetworkedVariable( "fwCampStressA", SNDC_GLOBAL, SNVT_FLOAT_RANGE, 0.0, 0.0, 1.0 )
 	RegisterNetworkedVariable( "fwCampAlertB", SNDC_GLOBAL, SNVT_INT )
 	RegisterNetworkedVariable( "fwCampStressB", SNDC_GLOBAL, SNVT_INT )
-	// can't use float rn
+	// waiting to be synced with client
 	//RegisterNetworkedVariable( "fwCampStressB", SNDC_GLOBAL, SNVT_FLOAT_RANGE, 0.0, 0.0, 1.0 )
 	RegisterNetworkedVariable( "fwCampAlertC", SNDC_GLOBAL, SNVT_INT )
 	RegisterNetworkedVariable( "fwCampStressC", SNDC_GLOBAL, SNVT_INT )
-	// can't use float rn
+	// waiting to be synced with client
 	//RegisterNetworkedVariable( "fwCampStressC", SNDC_GLOBAL, SNVT_FLOAT_RANGE, 0.0, 0.0, 1.0 )
 	
 	#if CLIENT                  

@@ -2,7 +2,12 @@
 untyped
 global function InitTurretBatteryPort // only for fw turrets!
 
-const asset BATTERY_PORT_USE_HINT_MODEL = $"models/weapons/bullets/mgl_grenade.mdl"
+//const asset BATTERY_PORT_USE_HINT_MODEL = $"models/weapons/bullets/mgl_grenade.mdl" // unused
+const float TURRET_BATTERY_REGEN_PERCENTAGE = 0.33
+const float TURRET_BATTERY_DAMAGE_PECENTAGE = 0.5
+const float TURRET_RESPAWN_HEALTH_PERCENTAGE = 0.75
+const float TURRET_RESPAWN_SHIELD_PERCENTAGE = 0.5
+
 
 /* // using entity.s instead
 global struct BatteryPortStruct
@@ -26,17 +31,22 @@ void function InitTurretBatteryPort( entity batteryPort )
     //batteryPort.s.hasBattery <- false             // bool, batteryPackInside is enough
     batteryPort.s.batteryPackInside <- null         // entity
     batteryPort.s.beingUsed <- false                // bool
+    batteryPort.s.hackAvaliable <- true            // bool, for controlling hacking avaliablity
 
     entity turret = GetNearestMegaTurret( batteryPort ) // consider this is the port's related turret
-    if( IsValid( turret ) )
-    {
-        SetTeam( batteryPort, turret.GetTeam() )
-        batteryPort.s.relatedTurret = turret
-        turret.s.relatedBatteryPort = batteryPort // do it here
-        thread TrackTurretLifeTime( batteryPort, turret )
-    }
 
-    batteryPort.SetUsableByGroup( "pilot" )
+    bool isBaseTurret = expect bool( turret.s.baseTurret )
+    SetTeam( batteryPort, turret.GetTeam() )
+    batteryPort.s.relatedTurret = turret
+    if( isBaseTurret ) // this is a base turret!
+        batteryPort.s.hackAvaliable = false // it can never be hacked!
+    turret.s.relatedBatteryPort = batteryPort // do it here
+    thread TrackTurretLifeTime( batteryPort, turret )
+
+    if( isBaseTurret ) // this is a base turret!
+        batteryPort.SetUsableByGroup( "friendlies pilot" ) // only show hint to friendlies
+    else
+        batteryPort.SetUsableByGroup( "pilot" ) // show hind to any pilots
     batteryPort.SetUsePrompts( "#FW_USE_GENERATOR_NO_BATTERY", "#FW_USE_GENERATOR_NO_BATTERY" ) // don't know what to use
     AddCallback_OnUseEntity( batteryPort, OnUseTurretBatteryPort )
 
@@ -56,13 +66,31 @@ void function TrackTurretLifeTime( entity batteryPort, entity turret )
     batteryPort.EndSignal( "OnDestroy" )
     turret.EndSignal( "OnDestroy" )
 
-    turret.WaitSignal( "OnDeath" )
-    entity battery = expect entity( batteryPort.s.batteryPackInside )
-    if( IsValid( battery ) ) // clear battery inside turret, wait for players recharge it
+    while( true )
     {
-        battery.Destroy()
-        batteryPort.s.batteryPackInside = null
+        WaitFrame()
+        if( turret.GetShieldHealth() == 0 ) // no shield mooooooooooo
+            TryCleanUpBatteryInBatteryPort( batteryPort )
+        if( !IsAlive( turret ) ) // turret down
+        {
+            if( !turret.s.baseTurret )
+                batteryPort.s.hackAvaliable = true // this ports is able to be hack   
+        }
     }
+}
+
+void function TryCleanUpBatteryInBatteryPort( entity batteryPort )
+{
+    entity battery = expect entity( batteryPort.s.batteryPackInside )
+    if( !IsValid( battery ) ) // already cleaned
+    {
+        batteryPort.s.batteryPackInside = null
+        return
+    }
+
+    battery.ClearParent()
+    battery.Destroy()
+    batteryPort.s.batteryPackInside = null
 }
 
 function OnUseTurretBatteryPort( entBeingUse, user )
@@ -95,17 +123,21 @@ void function TryUseTurretBatteryPort( entity player, entity batteryPort )
     if( !IsValid( turret ) ) // turret has been destroyed!
         return
 
-    // get turret's team, decide behavior
-    bool sameTeam = turret.GetTeam() == player.GetTeam() || turret.GetTeam() == TEAM_BOTH || turret.GetTeam() == TEAM_UNASSIGNED
+    // get turret's settings, decide behavior
+    bool validTeam = turret.GetTeam() == player.GetTeam() || turret.GetTeam() == TEAM_BOTH || turret.GetTeam() == TEAM_UNASSIGNED
     bool isBaseTurret = expect bool( turret.s.baseTurret )
-    if( IsValid( batteryPort.s.batteryPackInside ) && !sameTeam ) // port already has a battery
+    // is this port able to be hacked
+    bool portHackAvaliable = expect bool( batteryPort.s.hackAvaliable )
+
+    // port already has a battery, enemy try to remove it
+    if( IsValid( batteryPort.s.batteryPackInside ) && !validTeam ) 
     {
-        // enemy try to remove it
         waitthread PlayerRemoveBatteryPackFromPort( player, batteryPort )
     }
-    else if( PlayerHasBattery( player ) && sameTeam ) // player has a battery
+    // player has a battery, team valid or able to hack && not a base turret
+    else if( !IsValid( batteryPort.s.batteryPackInside ) && PlayerHasBattery( player ) && ( validTeam || ( portHackAvaliable && !isBaseTurret ) ) )
     {
-        // friendly try to apply one
+        // friendly try to apply one, or enemy try to hack this turret
         waitthread PlayerApplesBatteryPackToPort( player, batteryPort )
     }
 }
@@ -217,10 +249,15 @@ void function ApplyBatteryToBatteryPort( entity player, entity batteryPort )
     battery.SetParent( batteryPort, "REF" )
     battery.SetOrigin( < 0,0,5 > ) // offset
     batteryPort.s.batteryPackInside = battery
+    batteryPort.s.hackAvaliable = false // can't be hacked again until completely killed
 
     // change turret settings
-    bool turretReplaced = false
     entity turret = expect entity( batteryPort.s.relatedTurret ) // consider this is the port's related turret
+
+    int playerTeam = player.GetTeam()
+    bool turretReplaced = false
+    bool sameTeam = turret.GetTeam() == player.GetTeam()
+
     if( !IsAlive( turret ) ) // turret has been killed!
     {
         turret = FW_ReplaceMegaTurret( turret )
@@ -231,19 +268,75 @@ void function ApplyBatteryToBatteryPort( entity player, entity batteryPort )
         turretReplaced = true // if turret has been replaced, must reset team!
     }
 
-    if( turret.GetTeam() != player.GetTeam() || turretReplaced ) // is there a need to change team?
+    bool teamChanged = false
+    bool isBaseTurret = expect bool( turret.s.baseTurret )
+    if( ( !sameTeam || turretReplaced ) && !isBaseTurret ) // is there a need to change team?
     {
-        SetTeam( turret, player.GetTeam() )
+        SetTeam( turret, playerTeam )
+        teamChanged = true
     }
 
     // restore turret health
+    int newHealth = int ( min( turret.GetMaxHealth(), turret.GetHealth() + ( turret.GetMaxHealth() * TURRET_BATTERY_REGEN_PERCENTAGE ) ) )
+    if( turretReplaced ) // replaced turret will spawn with 75% health
+        newHealth = int ( turret.GetMaxHealth() * TURRET_RESPAWN_HEALTH_PERCENTAGE )
+    int newShield = turret.GetShieldHealthMax()
+    if( turretReplaced ) // replaced turret will spawn with 50% shield
+        newShield = int ( turret.GetMaxHealth() * TURRET_RESPAWN_SHIELD_PERCENTAGE )
     // this can be too much powerful
-    turret.SetHealth( min( turret.GetMaxHealth(), turret.GetHealth() + ( turret.GetMaxHealth() / 2 ) ) )
-    turret.SetShieldHealth( turret.GetShieldHealthMax() )
+    turret.SetHealth( newHealth )
+    turret.SetShieldHealth( newShield )
     EmitSoundOnEntityOnlyToPlayer( player, player, "UI_TitanBattery_Pilot_Give_TitanBattery" )
 
-    // give player titan meter
-    AddPlayerScore( player, "PilotBatteryApplied", player )
+    // score event
+    string scoreEvent = "FortWarForwardConstruction"
+    int secondaryScore = POINTVALUE_FW_FORWARD_CONSTRUCTION
+    if( isBaseTurret ) // this is a base turret
+    {
+        scoreEvent = "FortWarBaseConstruction"
+        secondaryScore = POINTVALUE_FW_FORWARD_CONSTRUCTION
+    }
+    AddPlayerScore( player, scoreEvent, player ) // player themself gets more meter
+    player.AddToPlayerGameStat( PGS_DEFENSE_SCORE, secondaryScore )
+
+    // get turrets alive, for adding scores
+    string teamTurretCount = GetTeamAliveTurretCount_ReturnString( playerTeam )
+    foreach( entity friendly in GetPlayerArrayOfTeam( playerTeam ) )
+        AddPlayerScore( friendly, "FortWarTeamTurretControlBonus_" + teamTurretCount, friendly )
+
+    // faction dialogue
+    //if( !teamChanged ) // this means player not hacking this turret
+    // "fortwar_turretDeployFriendly" wasn't a right dialogue, always play this.
+    PlayFactionDialogueToTeam( "fortwar_turretShieldedByFriendlyPilot", playerTeam )
+}
+
+// this will get english name of the count, since the "FortWarTeamTurretControlBonus_" score event uses it
+string function GetTeamAliveTurretCount_ReturnString( int team )
+{
+    int turretCount
+    foreach( entity turret in GetNPCArrayByClass( "npc_turret_mega" ) )
+    {
+        if( turret.GetTeam() == team && IsAlive( turret ) )
+            turretCount += 1
+    }
+
+    switch( turretCount )
+    {
+        case 1:
+            return "One"
+        case 2:
+            return "Two"
+        case 3:
+            return "Three"
+        case 4:
+            return "Four"
+        case 5:
+            return "Five"
+        case 6:
+            return "Six"
+    }
+
+    return ""
 }
 
 void function PlayerRemoveBatteryPackFromPort( entity player, entity batteryPort )
@@ -335,7 +428,7 @@ void function RemoveBatteryFromPort( entity player, entity batteryPort )
     if( !IsValid( battery ) )
         return
     // destroy the battery, don't give it to any players
-    battery.Destroy()
+    TryCleanUpBatteryInBatteryPort( batteryPort )
 
     entity turret = expect entity( batteryPort.s.relatedTurret )
     if( !IsAlive( turret ) ) // turret has been destroyed!
@@ -346,7 +439,7 @@ void function RemoveBatteryFromPort( entity player, entity batteryPort )
     //int damageAmount = int( turret.GetMaxHealth() * 0.5 ) // not just shield damage
     //turret.TakeDamage( damageAmount, player, player, { damageSourceId = eDamageSourceId.rodeo_battery_removal, scriptType = damageTypes.rodeoBatteryRemoval } )
     // directly set turret's health
-    turret.SetHealth( max( 0, turret.GetHealth() - ( turret.GetMaxHealth() / 3 ) ) ) // take less damage than applying
+    turret.SetHealth( max( 0, turret.GetHealth() - ( turret.GetMaxHealth() * TURRET_BATTERY_DAMAGE_PECENTAGE ) ) ) // take same damage than applying
     turret.SetShieldHealth( 0 ) // clean all shields left
     EmitSoundOnEntityOnlyToPlayer( player, player, "UI_TitanBattery_Pilot_Take_TitanBattery" )
 
