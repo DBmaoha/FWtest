@@ -139,6 +139,8 @@ void function GamemodeFW_Init()
 
     AddCallback_OnClientConnected( OnFWPlayerConnected )
     AddCallback_OnPlayerKilled( OnFWPlayerKilled )
+    AddCallback_OnPilotBecomesTitan( OnFWPilotBecomesTitan )
+    AddCallback_OnTitanBecomesPilot( OnFWTitanBecomesPilot )
 
     ScoreEvent_SetupEarnMeterValuesForMixedModes()
 
@@ -147,10 +149,6 @@ void function GamemodeFW_Init()
     ServerCommand( "sv_max_prop_data_dwords_multiplayer 300000" )
 
     ClassicMP_ForceDisableEpilogue( true ) // temp
-
-    //objective stuff
-    AddCallback_OnPilotBecomesTitan( SetTitanEarnObjective )
-    AddCallback_OnTitanBecomesPilot( SetPilotEarnObjective )
 }
 
 //////////////////////////
@@ -266,7 +264,7 @@ void function OnFWGamePlaying()
     FWAreaThreatLevelThink()
     StartFWCampThink()
     InitTurretSettings()
-    InitPlayerObjective()
+    FWPlayerObjectiveState()
 }
 
 void function OnFWGamePostmatch()
@@ -283,6 +281,18 @@ void function OnFWPlayerConnected( entity player )
 void function OnFWPlayerKilled( entity victim, entity attacker, var damageInfo )
 {
     HandleFWPlayerKilledScoreEvent( victim, attacker )
+}
+
+void function OnFWPilotBecomesTitan( entity player, entity titan )
+{
+    // objective stuff
+    SetTitanObjective( player, titan )
+}
+
+void function OnFWTitanBecomesPilot( entity player, entity titan )
+{
+    // objective stuff
+    SetPilotObjective( player, titan )
 }
 
 //////////////////////////////////
@@ -403,7 +413,7 @@ bool function TryFWTerritoryDialogue( entity territory, entity player )
     }
     foreach( entity enemy in enemiesInside )
     {
-        if( !IsValid( ent ) ) // since we're using a fake trigger, need to check this
+        if( !IsValid( enemy ) ) // since we're using a fake trigger, need to check this
             continue
         if( enemy.IsTitan() )
             enemyTitansInside.append( enemy )
@@ -630,6 +640,9 @@ void function InitFWPlayers( entity player )
 {
     HarvesterDamageStruct emptyStruct
     file.playerDamageHarvester[ player ] <- emptyStruct
+
+    // objective stuff
+    player.s.notifiedTitanfall <- false
 }
 
 ///////////////////////////////////////////
@@ -1005,12 +1018,12 @@ void function EntityEnterFWTrig( entity trigger, entity ent, entity caller, var 
         if ( sameTeam )
         {
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyEnterFriendlyArea" )
-            ent.SetPlayerNetInt( "indicatorId" , 1 )
+            ent.SetPlayerNetInt( "indicatorId", 1 ) // 1 means "FRIENDLY TERRITORY"
         }
         else
         {
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyEnterEnemyArea" )
-            ent.SetPlayerNetInt( "indicatorId" , 2 )
+            ent.SetPlayerNetInt( "indicatorId", 2 ) // 2 means "ENEMY TERRITORY"
         }
     }
 }
@@ -1042,7 +1055,7 @@ void function EntityLeaveFWTrig( entity trigger, entity ent, entity caller, var 
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyExitFriendlyArea" )
         else
             Remote_CallFunction_NonReplay( ent , "ServerCallback_FW_NotifyExitEnemyArea" )
-        ent.SetPlayerNetInt( "indicatorId" , 4 )
+        ent.SetPlayerNetInt( "indicatorId", 4 ) // 4 means "NO MAN'S LAND"
     }
 }
 
@@ -1577,21 +1590,21 @@ void function FW_createHarvester()
 	fw_harvesterImc.harvester.Minimap_SetCustomState( eMinimapObject_prop_script.FD_HARVESTER )
     AddEntityCallback_OnDamaged( fw_harvesterImc.harvester, OnHarvesterDamaged )
 
-    // mlt havester settings
+    // imc havester settings
     // don't set this, or sonar pulse will try to find it and failed to set highlight
-    //fw_harvesterImc.harvester.SetScriptName("fw_team_tower")
-    file.harvesters.append(fw_harvesterMlt)
-    entity trackerMlt = GetAvailableBaseLocationTracker()
-    trackerMlt.SetOwner( fw_harvesterMlt.harvester )
-    DispatchSpawn( trackerMlt )
-    SetLocationTrackerRadius( trackerMlt, 1 ) // whole map
+    //fw_harvesterMlt.harvester.SetScriptName("fw_team_tower")
+    file.harvesters.append(fw_harvesterImc)
+    entity trackerImc = GetAvailableBaseLocationTracker()
+    trackerImc.SetOwner( fw_harvesterImc.harvester )
+    DispatchSpawn( trackerImc )
+    SetLocationTrackerRadius( trackerImc, 1 ) // whole map
 
     // scores starts from 100, TeamScore means harvester health; TeamScore2 means shield bar
     GameRules_SetTeamScore( TEAM_MILITIA , 100 )
     GameRules_SetTeamScore2( TEAM_MILITIA , 100 )
 
 
-    // imc havester spawn
+    // mlt havester spawn
     fw_harvesterMlt = SpawnHarvester( file.harvesterMlt_info.GetOrigin(), file.harvesterMlt_info.GetAngles(), GetCurrentPlaylistVarInt( "fd_harvester_health", FW_DEFAULT_HARVESTER_HEALTH ), GetCurrentPlaylistVarInt( "fd_harvester_shield", FW_DEFAULT_HARVESTER_SHIELD ), TEAM_MILITIA )
     fw_harvesterMlt.harvester.Minimap_SetAlignUpright( true )
 	fw_harvesterMlt.harvester.Minimap_AlwaysShow( TEAM_IMC, null )
@@ -1601,14 +1614,14 @@ void function FW_createHarvester()
 	fw_harvesterMlt.harvester.Minimap_SetCustomState( eMinimapObject_prop_script.FD_HARVESTER )
 	AddEntityCallback_OnDamaged( fw_harvesterMlt.harvester, OnHarvesterDamaged )
 
-    // imc havester settings
+    // mlt havester settings
     // don't set this, or sonar pulse will try to find it and failed to set highlight
-    //fw_harvesterMlt.harvester.SetScriptName("fw_team_tower")
-    file.harvesters.append(fw_harvesterImc)
-    entity trackerImc = GetAvailableBaseLocationTracker()
-    trackerImc.SetOwner( fw_harvesterImc.harvester )
-    DispatchSpawn( trackerImc )
-    SetLocationTrackerRadius( trackerImc , 1 ) // whole map
+    //fw_harvesterImc.harvester.SetScriptName("fw_team_tower")
+    file.harvesters.append(fw_harvesterMlt)
+    entity trackerMlt = GetAvailableBaseLocationTracker()
+    trackerMlt.SetOwner( fw_harvesterMlt.harvester )
+    DispatchSpawn( trackerMlt )
+    SetLocationTrackerRadius( trackerMlt, 1 ) // whole map
 
     // scores starts from 100, TeamScore means harvester health; TeamScore2 means shield bar
     GameRules_SetTeamScore( TEAM_IMC , 100 )
@@ -1702,16 +1715,10 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
 			PlayFactionDialogueToTeam( "fortwar_baseDmgEnemy25", enemyTeam )
 		}
 
-		if (healthpercent <= 10)
-		{
-			//PlayFactionDialogueToTeam( "fd_baseLowHealth", TEAM_MILITIA )
-		}
-
 		if( newHealth <= 0 )
 		{
 			EmitSoundAtPosition(TEAM_UNASSIGNED,harvesterstruct.harvester.GetOrigin(),"coop_generator_destroyed")
 			newHealth = 0
-			//PlayFactionDialogueToTeam( "fd_baseDeath", TEAM_MILITIA )
 			harvesterstruct.rings.Destroy()
 			harvesterstruct.harvester.Dissolve( ENTITY_DISSOLVE_CORE, Vector( 0, 0, 0 ), 500 )
 		}
@@ -1879,64 +1886,87 @@ void function UpdateHarvesterHealth( int team )
 ///////////////////////////////////
 
 
-void function InitPlayerObjective()
+
+//////////////////////////////////////
+///// PLAYER OBJECTIVE FUNCTIONS /////
+//////////////////////////////////////
+
+const int APPLY_BATTERY_TEXT_INDEX = 96 // notify player to use batteries on turrets
+const int EARN_TITAN_TEXT_INDEX = 100 // notify player to earn titans
+const int CALL_IN_TITAN_TEXT_INDEX = 101 // notify player to call in titans in territory
+const int EMBARK_TITAN_TEXT_INDEX = 102 // notify player to embark titans
+const int ATTACK_HARVESTER_TEXT_INDEX = 103 // notify player to attack harvester
+
+void function FWPlayerObjectiveState()
 {
-    foreach( player in GetPlayerArray() )
-    {
-        player.s.shouldcallTF <- true
-        player.SetPlayerNetInt( "gameInfoStatusText" , 100 )//EARN
-    }
-    thread CheckTitanAvaiable()
+    thread FWPlayerObjectiveState_Threaded()
 }
 
-
-
-
-void function CheckTitanAvaiable()
+void function FWPlayerObjectiveState_Threaded()
 {
-    while( GetGameState() == eGameState.Playing )
+    while( GamePlayingOrSuddenDeath() )
     {
         foreach( player in GetPlayerArray() )
         {
-            //bool shouldcallTF = expect bool( player.s.shouldcallTF )
+            entity petTitan = player.GetPetTitan()
+            entity titanSoul
+            if( IsValid( petTitan ) )
+                titanSoul = petTitan.GetTitanSoul()
+
             if ( IsValid( GetBatteryOnBack( player ) ) )
+                player.SetPlayerNetInt( "gameInfoStatusText", APPLY_BATTERY_TEXT_INDEX ) 
+            else if ( IsTitanAvailable( player ) )
             {
-                if ( player.GetPlayerNetInt( "gameInfoStatusText" ) != 96 )// must becuz we need continue the loop
-                    player.SetPlayerNetInt( "gameInfoStatusText" , 96 ) //USE_BATTERY
-                continue
+                if( !player.s.notifiedTitanfall ) // first notification, also do a objective announcement
+                {
+                    SetObjective( player, CALL_IN_TITAN_TEXT_INDEX )
+                    player.s.notifiedTitanfall = true
+                }
+                else
+                    player.SetPlayerNetInt( "gameInfoStatusText", CALL_IN_TITAN_TEXT_INDEX ) 
             }
-            if ( IsTitanAvailable( player ) && player.s.shouldcallTF == true )
-            {
-                SetObjective( player , 101 ) //TITANFALL
-                player.s.shouldcallTF = false
-            }
-            if ( IsValid( player.GetPetTitan() ) && player.GetPlayerNetInt( "gameInfoStatusText" ) != 102 )
-            {
-                player.SetPlayerNetInt( "gameInfoStatusText" , 102 ) //EMBARK
-            }
+            else if ( IsValid( petTitan ) )
+                player.SetPlayerNetInt( "gameInfoStatusText", EMBARK_TITAN_TEXT_INDEX )
+            else if ( IsAlive( player ) && !player.IsTitan() )
+                player.SetPlayerNetInt( "gameInfoStatusText", EARN_TITAN_TEXT_INDEX )
+            else if ( !IsAlive( player ) ) // don't show hints for dying players
+                player.SetPlayerNetInt( "gameInfoStatusText", -1 )
+
+            else if( !IsValid( titanSoul ) ) // titan died or player first embarked
+                player.s.notifiedTitanfall = false
         }
         WaitFrame()
     }
-}
 
-void function SetObjective( entity player , int stringid )
-{
-    Remote_CallFunction_NonReplay( player , "ServerCallback_FW_SetObjective" , stringid )
-    player.SetPlayerNetInt( "gameInfoStatusText" , stringid )
-}
-
-void function SetTitanEarnObjective( entity player ,entity titan )
-{
-    SetObjective( player , 103 )//ATTACK
-}
-
-void function SetPilotEarnObjective( entity player ,entity titan )
-{
-    if( titan.GetTitanSoul().IsEjecting() )
+    // game entered other state, clean this
+    foreach( player in GetPlayerArray() )
     {
-        SetObjective( player , 100  )//EARN
-        player.s.shouldcallTF = true
+        player.SetPlayerNetInt( "gameInfoStatusText", -1 )
+    }
+}
+
+void function SetObjective( entity player, int stringid )
+{
+    Remote_CallFunction_NonReplay( player, "ServerCallback_FW_SetObjective", stringid )
+    player.SetPlayerNetInt( "gameInfoStatusText", stringid )
+}
+
+void function SetTitanObjective( entity player, entity titan )
+{
+    SetObjective( player, ATTACK_HARVESTER_TEXT_INDEX )
+}
+
+void function SetPilotObjective( entity player, entity titan )
+{
+    if( titan.GetTitanSoul().IsEjecting() ) // this time titan is ejecting
+    {
+        SetObjective( player, EARN_TITAN_TEXT_INDEX )
+        player.s.notifiedTitanfall = false
     }
     else
-        player.SetPlayerNetInt( "gameInfoStatusText" , 102 )//EMBARK
+        player.SetPlayerNetInt( "gameInfoStatusText", EMBARK_TITAN_TEXT_INDEX )
 }
+
+//////////////////////////////////////////
+///// PLAYER OBJECTIVE FUNCTIONS END /////
+//////////////////////////////////////////
