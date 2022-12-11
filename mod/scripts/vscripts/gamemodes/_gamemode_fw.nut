@@ -320,23 +320,23 @@ void function InitFWScoreEvents()
 
     // constructions
     ScoreEvent_SetEarnMeterValues( "FortWarBaseConstruction", 0.0, 0.25 )
-	ScoreEvent_SetEarnMeterValues( "FortWarForwardConstruction", 0.1, 0.25 )
-    ScoreEvent_SetEarnMeterValues( "FortWarInvasiveConstruction", 0.1, 0.25 ) // unused
+	ScoreEvent_SetEarnMeterValues( "FortWarForwardConstruction", 0.0, 0.25 )
+    ScoreEvent_SetEarnMeterValues( "FortWarInvasiveConstruction", 0.0, 0.25 ) // unused
 	ScoreEvent_SetEarnMeterValues( "FortWarResourceDenial", 0.0, 0.05 ) // unused
     ScoreEvent_SetEarnMeterValues( "FortWarSecuringGatheredResources", 0.0, 0.05 ) // unused
 
     // tower
-    ScoreEvent_SetEarnMeterValues( "FortWarTowerDamage", 0.0, 0.05 ) // using the const FW_HARVESTER_DAMAGE_SEGMENT
-    ScoreEvent_SetEarnMeterValues( "FortWarTowerDefense", 0.0, 0.1, 0.0 ) // titans don't earn
+    ScoreEvent_SetEarnMeterValues( "FortWarTowerDamage", 0.0, 0.10, 0.5 ) // using the const FW_HARVESTER_DAMAGE_SEGMENT
+    ScoreEvent_SetEarnMeterValues( "FortWarTowerDefense", 0.0, 0.10, 0.0 ) // titans don't earn
     ScoreEvent_SetEarnMeterValues( "FortWarShieldDestroyed", 0.0, 0.15 )
 
     // turrets
-    ScoreEvent_SetEarnMeterValues( "FortWarTeamTurretControlBonus_One", 0.0, 0.25, 0.4 ) // give more meter if no turret left
-    ScoreEvent_SetEarnMeterValues( "FortWarTeamTurretControlBonus_Two", 0.0, 0.2, 0.5 )
-    ScoreEvent_SetEarnMeterValues( "FortWarTeamTurretControlBonus_Three", 0.0, 0.2, 0.5 )
-    ScoreEvent_SetEarnMeterValues( "FortWarTeamTurretControlBonus_Four", 0.0, 0.1, 0.5 ) // give less meter if controlled most turrets
-    ScoreEvent_SetEarnMeterValues( "FortWarTeamTurretControlBonus_Five", 0.0, 0.1, 0.5 )
-    ScoreEvent_SetEarnMeterValues( "FortWarTeamTurretControlBonus_Six", 0.0, 0.1, 0.5 )
+    ScoreEvent_SetEarnMeterValues( "FortWarTeamTurretControlBonus_One", 0.0, 0.15, 0.5 ) // give more meter if no turret left
+    ScoreEvent_SetEarnMeterValues( "FortWarTeamTurretControlBonus_Two", 0.0, 0.15, 0.5 )
+    ScoreEvent_SetEarnMeterValues( "FortWarTeamTurretControlBonus_Three", 0.0, 0.10, 0.5 )
+    ScoreEvent_SetEarnMeterValues( "FortWarTeamTurretControlBonus_Four", 0.0, 0.10, 0.5 ) // give less meter if controlled most turrets
+    ScoreEvent_SetEarnMeterValues( "FortWarTeamTurretControlBonus_Five", 0.0, 0.05, 0.5 )
+    ScoreEvent_SetEarnMeterValues( "FortWarTeamTurretControlBonus_Six", 0.0, 0.05, 0.5 )
 }
 
 // consider this means victim recently damaged harvester
@@ -403,6 +403,7 @@ void function HandleFWPlayerKilledScoreEvent( entity victim, entity attacker )
 
 const float FW_TERRYTORY_DIALOGUE_DEBOUNCE = 5.0
 
+// WORKING IN PROGRESS
 bool function TryFWTerritoryDialogue( entity territory, entity player )
 {
     bool thisTimeIsTitan = player.IsTitan()
@@ -1025,7 +1026,7 @@ void function EntityEnterFWTrig( entity trigger, entity ent, entity caller, var 
     {
         ScriptTriggerAddEntity( trigger, ent )
         thread ScriptTriggerPlayerDisconnectThink( trigger, ent )
-        TryFWTerritoryDialogue( trigger, ent )
+        //TryFWTerritoryDialogue( trigger, ent ) // WIP
         file.teamTerrLastConnectTime[ trigger.GetTeam() ] = Time()
     }
 
@@ -1060,7 +1061,7 @@ void function EntityLeaveFWTrig( entity trigger, entity ent, entity caller, var 
         if( ent in trigger.e.scriptTriggerData.entities ) // need to check this!
         {
             ScriptTriggerRemoveEntity( trigger, ent )
-            TryFWTerritoryDialogue( trigger, ent )
+            //TryFWTerritoryDialogue( trigger, ent ) // WIP
             file.teamTerrLastConnectTime[ trigger.GetTeam() ] = Time()
         }
     }
@@ -1745,6 +1746,10 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
 
 	if ( attacker.IsPlayer() )
 	{
+        // dialogue for enemy attackers
+        if( !harvesterstruct.harvesterShieldDown )
+            PlayFactionDialogueToTeam( "fortwar_baseEnemyAllyAttacking", enemyTeam )
+
 		attacker.NotifyDidDamage( harvester, DamageInfo_GetHitBox( damageInfo ), DamageInfo_GetDamagePosition( damageInfo ), DamageInfo_GetCustomDamageType( damageInfo ), DamageInfo_GetDamage( damageInfo ), DamageInfo_GetDamageFlags( damageInfo ), DamageInfo_GetHitGroup( damageInfo ), DamageInfo_GetWeapon( damageInfo ), DamageInfo_GetDistFromAttackOrigin( damageInfo ) )
 
         // get newest damage for adding score!
@@ -1762,6 +1767,7 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
         }
 	}
 
+    // always reset harvester's recharge delay
     harvesterstruct.lastDamage = Time()
 
     if ( harvester.GetHealth() == 0 )
@@ -1948,11 +1954,11 @@ void function FWPlayerObjectiveState_Threaded()
                 player.SetPlayerNetInt( "gameInfoStatusText", EMBARK_TITAN_TEXT_INDEX )
             else if ( IsAlive( player ) && !player.IsTitan() )
                 player.SetPlayerNetInt( "gameInfoStatusText", EARN_TITAN_TEXT_INDEX )
-            else if ( !IsAlive( player ) ) // don't show hints for dying players
-                player.SetPlayerNetInt( "gameInfoStatusText", -1 )
-
             else if( !IsValid( titanSoul ) ) // titan died or player first embarked
                 player.s.notifiedTitanfall = false
+
+            if ( !IsAlive( player ) ) // don't show objetive for dying players
+                player.SetPlayerNetInt( "gameInfoStatusText", -1 )
         }
         WaitFrame()
     }
