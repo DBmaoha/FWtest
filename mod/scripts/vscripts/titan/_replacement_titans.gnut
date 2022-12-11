@@ -527,10 +527,13 @@ bool function ClientCommand_RequestTitan( entity player, array<string> args )
 {
 	if( GAMETYPE == FORT_WAR )
 	{
-		if( !FW_PlayerInFriendlyTerritory( player ) ) // is player in friendly base?
+		if( !FW_IsPlayerInFriendlyTerritory( player ) ) // is player in friendly base?
 		{
+			PlayFactionDialogueToPlayer( "tw_territoryNag", player ) // notify player
+			TryPlayTitanfallNegativeSoundToPlayer( player )
+			int objectiveID = 101 // which means "#FW_OBJECTIVE_TITANFALL"
 			//CreateCustomMessageForRefusingTitanfall( player )
-			Remote_CallFunction_NonReplay( player, "ServerCallback_FW_SetObjective", 101 ) // #FW_OBJECTIVE_TITANFALL
+			Remote_CallFunction_NonReplay( player, "ServerCallback_FW_SetObjective", objectiveID ) 
 			return true
 		}
 	}
@@ -538,16 +541,31 @@ bool function ClientCommand_RequestTitan( entity player, array<string> args )
 	return true
 }
 
+bool function TryPlayTitanfallNegativeSoundToPlayer( entity player )
+{
+	if( !( "lastNegativeSound" in player.s ) )
+		player.s.lastNegativeSound <- 0.0 // float
+	if( player.s.lastNegativeSound + 3.0 > Time() ) // in sound cooldown
+		return false
+
+	EmitSoundOnEntityOnlyToPlayer( player, player, "titan_dryfire" )
+	player.s.lastNegativeSound = Time()
+	
+	return true
+}
+
+/* // serverSideRUI can't handle localized strings
 void function CreateCustomMessageForRefusingTitanfall( entity player )
 {
 	if( !( "lastMessageSend" in player.s ) )
 		player.s.lastMessageSend <- 0.0 // float
 	if( player.s.lastMessageSend + 10 > Time() ) // in message cooldown
 		return
-	// NSSendInfoMessageToPlayer() can't handle localized strings
+ 
 	NSSendInfoMessageToPlayer( player, "#FW_OBJECTIVE_TITANFALL" )
 	player.s.lastMessageSend = Time()
 }
+*/
 
 // This a baseline titan request function; the only things that prevent this from happening are
 // common cases; wrong gamestate, already has a titan, is currently dead, etc...
