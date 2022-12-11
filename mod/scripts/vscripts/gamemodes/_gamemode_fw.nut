@@ -1358,120 +1358,127 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
 	if ( !IsValid( harvester ) )
 		return
 
-    GameRules_SetTeamScore( harvester.GetTeam() , 1.0 * GetHealthFrac( harvester ) * 100 )
+	int friendlyTeam = harvester.GetTeam()
+	int enemyTeam = GetOtherTeam( friendlyTeam )
 
-    int damageSourceID = DamageInfo_GetDamageSourceIdentifier( damageInfo )
-    entity attacker = DamageInfo_GetAttacker( damageInfo )
-    float damageAmount = DamageInfo_GetDamage( damageInfo )
+	GameRules_SetTeamScore( friendlyTeam , 1.0 * GetHealthFrac( harvester ) * 100 )
 
-    if ( !damageSourceID && !damageAmount && !attacker ) // actually not dealing any damage?
-        return
+	int damageSourceID = DamageInfo_GetDamageSourceIdentifier( damageInfo )
+	entity attacker = DamageInfo_GetAttacker( damageInfo )
+	float damageAmount = DamageInfo_GetDamage( damageInfo )
 
-    // done damage adjustments here, since harvester prop's health is setting manually through damageAmount
-    if ( damageSourceID == eDamageSourceId.mp_titancore_laser_cannon )
-        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/100 ) // laser core shreds super well for some reason
+	if ( !damageSourceID && !damageAmount && !attacker ) // actually not dealing any damage?
+		return
 
-    if ( damageSourceID == eDamageSourceId.mp_titanweapon_flightcore_rockets ||
-        damageSourceID == eDamageSourceId.mp_titanweapon_salvo_rockets ||
-        damageSourceID == eDamageSourceId.mp_titanweapon_shoulder_rockets ||
-        damageSourceID == eDamageSourceId.mp_titanweapon_dumbfire_rockets
-    ) // titan missiles
-        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/3 ) 
+	// done damage adjustments here, since harvester prop's health is setting manually through damageAmount
+	if ( damageSourceID == eDamageSourceId.mp_titancore_laser_cannon )
+		DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/100 ) // laser core shreds super well for some reason
 
-    if ( damageSourceID == eDamageSourceId.mp_titanweapon_meteor_thermite || 
-        damageSourceID == eDamageSourceId.mp_titanweapon_flame_wall ||
-        damageSourceID == eDamageSourceId.mp_titanability_slow_trap ||
-        damageSourceID == eDamageSourceId.mp_titancore_flame_wave_secondary
-    ) // scorch's thermite damages
-        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/4 ) // nerf scorch
+	if ( damageSourceID == eDamageSourceId.mp_titanweapon_flightcore_rockets ||
+		damageSourceID == eDamageSourceId.mp_titanweapon_salvo_rockets ||
+		damageSourceID == eDamageSourceId.mp_titanweapon_shoulder_rockets ||
+		damageSourceID == eDamageSourceId.mp_titanweapon_dumbfire_rockets
+	) // titan missiles
+		DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/3 ) 
 
-    HarvesterStruct harvesterstruct // current harveter's struct
-    if( harvester.GetTeam() == TEAM_MILITIA )
-        harvesterstruct = fw_harvesterMlt
-    if( harvester.GetTeam() == TEAM_IMC )
-        harvesterstruct = fw_harvesterImc
+	if ( damageSourceID == eDamageSourceId.mp_titanweapon_meteor_thermite || 
+		damageSourceID == eDamageSourceId.mp_titanweapon_flame_wall ||
+		damageSourceID == eDamageSourceId.mp_titanability_slow_trap ||
+		damageSourceID == eDamageSourceId.mp_titancore_flame_wave_secondary
+	) // scorch's thermite damages
+		DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/4 ) // nerf scorch
 
-    if ( harvester.GetShieldHealth() - damageAmount <= 0 ) // this shot breaks shield
-    {
-        damageAmount = DamageInfo_GetDamage( damageInfo ) // get damageAmount again after all damage adjustments
+	HarvesterStruct harvesterstruct // current harveter's struct
+	if( friendlyTeam == TEAM_MILITIA )
+		harvesterstruct = fw_harvesterMlt
+	if( friendlyTeam == TEAM_IMC )
+		harvesterstruct = fw_harvesterImc
 
-        if ( !attacker.IsTitan() )
-        {
-            if( attacker.IsPlayer() )
-                Remote_CallFunction_NonReplay( attacker , "ServerCallback_FW_NotifyTitanRequired" )
-            DamageInfo_SetDamage( damageInfo, harvester.GetShieldHealth() )
-            damageAmount = 0 // never damage haveter's prop
-        }
-        if( !harvesterstruct.harvesterShieldDown )
-        {
-            PlayFactionDialogueToTeam( "fortwar_baseShieldDownFriendly", harvester.GetTeam() )
-            PlayFactionDialogueToTeam( "fortwar_baseShieldDownEnemy", GetOtherTeam(harvester.GetTeam()) )
-            harvesterstruct.harvesterShieldDown = true // prevent shield dialogues from repeating
-	foreach( entity player in GetPlayerArrayOfTeam_Alive( harvester.GetTeam() ) )
-		Remote_CallFunction_NonReplay( player , ServerCallback_FW_FriendlyBaseAttacked , GetStringID( "#FW_SHIELD_DOWN" ) )
-        }
-        harvesterstruct.harvesterDamageTaken = harvesterstruct.harvesterDamageTaken + damageAmount // track damage for wave recaps
-        float newHealth = harvester.GetHealth() - damageAmount
-        float oldhealthpercent = ( ( harvester.GetHealth().tofloat() / harvester.GetMaxHealth() ) * 100 )
-        float healthpercent = ( ( newHealth / harvester.GetMaxHealth() ) * 100 )
-	if( Time() - harvesterstruct.lastDamage > FW_HARVESTER_DAMAGED_DEBOUNCE )
-		foreach( entity player in GetPlayerArrayOfTeam_Alive( harvester.GetTeam() ) )
-			Remote_CallFunction_NonReplay( player , ServerCallback_FW_FriendlyBaseAttacked , GetStringID( "#FW_TEAM_TOWER_UNDER_ATTACK" ) )
+	if ( harvester.GetShieldHealth() - damageAmount <= 0 ) // this shot breaks shield
+	{
+		damageAmount = DamageInfo_GetDamage( damageInfo ) // get damageAmount again after all damage adjustments
 
-        if (healthpercent <= 75 && oldhealthpercent > 75) // we don't want the dialogue to keep saying "Harvester is below 75% health" everytime they take additional damage
-        {
-            PlayFactionDialogueToTeam( "fortwar_baseDmgFriendly75", harvester.GetTeam() )
-            PlayFactionDialogueToTeam( "fortwar_baseDmgEnemy75", GetOtherTeam(harvester.GetTeam()) )
-        }
+		if ( !attacker.IsTitan() )
+		{
+			if( attacker.IsPlayer() )
+				Remote_CallFunction_NonReplay( attacker , "ServerCallback_FW_NotifyTitanRequired" )
+			DamageInfo_SetDamage( damageInfo, harvester.GetShieldHealth() )
+			damageAmount = 0 // never damage haveter's prop
+		}
 
-        if (healthpercent <= 50 && oldhealthpercent > 50)
-        {
-            PlayFactionDialogueToTeam( "fortwar_baseDmgFriendly50", harvester.GetTeam() )
-            PlayFactionDialogueToTeam( "fortwar_baseDmgEnemy50", GetOtherTeam(harvester.GetTeam()) )
-        }
+		if( !harvesterstruct.harvesterShieldDown )
+		{
+			PlayFactionDialogueToTeam( "fortwar_baseShieldDownFriendly", friendlyTeam )
+			PlayFactionDialogueToTeam( "fortwar_baseShieldDownEnemy", enemyTeam )
+			harvesterstruct.harvesterShieldDown = true // prevent shield dialogues from repeating
+			foreach( entity player in GetPlayerArrayOfTeam_Alive( friendlyTeam ) )
+				Remote_CallFunction_NonReplay( player , ServerCallback_FW_FriendlyBaseAttacked , GetStringID( "#FW_SHIELD_DOWN" ) )
+		 }
 
-        if (healthpercent <= 25 && oldhealthpercent > 25)
-        {
-            PlayFactionDialogueToTeam( "fortwar_baseDmgFriendly25", harvester.GetTeam() )
-            PlayFactionDialogueToTeam( "fortwar_baseDmgEnemy25", GetOtherTeam(harvester.GetTeam()) )
-        }
+		harvesterstruct.harvesterDamageTaken = harvesterstruct.harvesterDamageTaken + damageAmount // track damage for wave recaps
+		float newHealth = harvester.GetHealth() - damageAmount
+		float oldhealthpercent = ( ( harvester.GetHealth().tofloat() / harvester.GetMaxHealth() ) * 100 )
+		float healthpercent = ( ( newHealth / harvester.GetMaxHealth() ) * 100 )
 
-        if (healthpercent <= 10)
-        {
-            //PlayFactionDialogueToTeam( "fd_baseLowHealth", TEAM_MILITIA )
-        }
+		if( Time() - harvesterstruct.lastDamage > FW_HARVESTER_DAMAGED_DEBOUNCE )
+			foreach( entity player in GetPlayerArrayOfTeam_Alive( friendlyTeam ) )
+				Remote_CallFunction_NonReplay( player , ServerCallback_FW_FriendlyBaseAttacked , GetStringID( "#FW_TEAM_TOWER_UNDER_ATTACK" ) )
 
-        if( newHealth <= 0 )
-        {
-            EmitSoundAtPosition(TEAM_UNASSIGNED,harvesterstruct.harvester.GetOrigin(),"coop_generator_destroyed")
-            newHealth = 0
-            //PlayFactionDialogueToTeam( "fd_baseDeath", TEAM_MILITIA )
-            harvesterstruct.rings.Destroy()
-            harvesterstruct.harvester.Dissolve( ENTITY_DISSOLVE_CORE, Vector( 0, 0, 0 ), 500 )
-        }
-        harvester.SetHealth( newHealth )
-        harvesterstruct.havesterWasDamaged = true
-    }
+		if (healthpercent <= 75 && oldhealthpercent > 75) // we don't want the dialogue to keep saying "Harvester is below 75% health" everytime they take additional damage
+		{
+			PlayFactionDialogueToTeam( "fortwar_baseDmgFriendly75", friendlyTeam )
+			PlayFactionDialogueToTeam( "fortwar_baseDmgEnemy75", enemyTeam )
+		}
+
+		if (healthpercent <= 50 && oldhealthpercent > 50)
+		{
+			PlayFactionDialogueToTeam( "fortwar_baseDmgFriendly50", friendlyTeam )
+			PlayFactionDialogueToTeam( "fortwar_baseDmgEnemy50", enemyTeam )
+		}
+
+		if (healthpercent <= 25 && oldhealthpercent > 25)
+		{
+			PlayFactionDialogueToTeam( "fortwar_baseDmgFriendly25", friendlyTeam )
+			PlayFactionDialogueToTeam( "fortwar_baseDmgEnemy25", enemyTeam )
+		}
+
+		if (healthpercent <= 10)
+		{
+			//PlayFactionDialogueToTeam( "fd_baseLowHealth", TEAM_MILITIA )
+		}
+
+		if( newHealth <= 0 )
+		{
+			EmitSoundAtPosition(TEAM_UNASSIGNED,harvesterstruct.harvester.GetOrigin(),"coop_generator_destroyed")
+			newHealth = 0
+			//PlayFactionDialogueToTeam( "fd_baseDeath", TEAM_MILITIA )
+			harvesterstruct.rings.Destroy()
+			harvesterstruct.harvester.Dissolve( ENTITY_DISSOLVE_CORE, Vector( 0, 0, 0 ), 500 )
+		}
+
+		harvester.SetHealth( newHealth )
+		harvesterstruct.havesterWasDamaged = true
+	}
 	else{	//Shield not break
 		if( Time() - harvesterstruct.lastDamage > FW_HARVESTER_DAMAGED_DEBOUNCE )
-			foreach( entity player in GetPlayerArrayOfTeam_Alive( harvester.GetTeam() ) )
+			foreach( entity player in GetPlayerArrayOfTeam_Alive( friendlyTeam ) )
 				Remote_CallFunction_NonReplay( player , ServerCallback_FW_FriendlyBaseAttacked , GetStringID( "#FW_SHIELD_UNDER_ATTACK" ) )
 	}
 
-    if ( attacker.IsPlayer() )
-    {
-        attacker.NotifyDidDamage( harvester, DamageInfo_GetHitBox( damageInfo ), DamageInfo_GetDamagePosition( damageInfo ), DamageInfo_GetCustomDamageType( damageInfo ), DamageInfo_GetDamage( damageInfo ), DamageInfo_GetDamageFlags( damageInfo ), DamageInfo_GetHitGroup( damageInfo ), DamageInfo_GetWeapon( damageInfo ), DamageInfo_GetDistFromAttackOrigin( damageInfo ) )
-        //attacker.AddToPlayerGameStat( PGS_PILOT_KILLS, DamageInfo_GetDamage( damageInfo ) * 0.01 )
-    }
+	if ( attacker.IsPlayer() )
+	{
+		attacker.NotifyDidDamage( harvester, DamageInfo_GetHitBox( damageInfo ), DamageInfo_GetDamagePosition( damageInfo ), 		DamageInfo_GetCustomDamageType( damageInfo ), DamageInfo_GetDamage( damageInfo ), DamageInfo_GetDamageFlags( damageInfo ), 		DamageInfo_GetHitGroup( damageInfo ), DamageInfo_GetWeapon( damageInfo ), DamageInfo_GetDistFromAttackOrigin( damageInfo ) )
+		//attacker.AddToPlayerGameStat( PGS_PILOT_KILLS, DamageInfo_GetDamage( damageInfo ) * 0.01 )
+	}
 
-    harvesterstruct.lastDamage = Time()
-    if ( harvester.GetHealth() == 0 )
-    {
-        int winnerTeam = GetOtherTeam( harvester.GetTeam() )
-        SetWinner( winnerTeam )
-        GameRules_SetTeamScore2( harvester.GetTeam(), 0 ) // force set score2 to 0( shield bar will empty )
-        GameRules_SetTeamScore( harvester.GetTeam(), 0 ) // force set score to 0( health 0% )
-    }
+	harvesterstruct.lastDamage = Time()
+
+	if ( harvester.GetHealth() == 0 )
+	{
+		SetWinner( enemyTeam )
+		GameRules_SetTeamScore2( friendlyTeam, 0 ) // force set score2 to 0( shield bar will empty )
+		GameRules_SetTeamScore( friendlyTeam, 0 ) // force set score to 0( health 0% )
+	}
 }
 
 void function HarvesterThink( HarvesterStruct fd_harvester )
