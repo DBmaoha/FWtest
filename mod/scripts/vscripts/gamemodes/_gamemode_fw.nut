@@ -384,16 +384,22 @@ bool function TryFWTerritoryDialogue( entity territory, entity player )
     array<entity> enemyTitansInside
     foreach( entity ent in allEntsInside )
     {
+        if( !IsValid( ent ) ) // since we're using a fake trigger, need to check this
+            continue
         if( ent.GetTeam() == terrTeam )
             friendliesInside.append( ent )
     }
     foreach( entity ent in allEntsInside )
     {
+        if( !IsValid( ent ) ) // since we're using a fake trigger, need to check this
+            continue
         if( ent.GetTeam() != terrTeam )
             enemiesInside.append( ent )
     }
     foreach( entity enemy in enemiesInside )
     {
+        if( !IsValid( ent ) ) // since we're using a fake trigger, need to check this
+            continue
         if( enemy.IsTitan() )
             enemyTitansInside.append( enemy )
     }
@@ -1195,6 +1201,8 @@ void function FWAreaThreatLevelThink_Threaded()
         foreach( entity ent in imcEntArray )
         {
             //print( ent )
+            if( !IsValid( ent ) ) // since we're using a fake trigger, need to check this
+                continue
             if( ent.IsPlayer() || ent.IsNPC() )
             {
                 if( ent.IsTitan() && ent.GetTeam() != TEAM_IMC )
@@ -1204,6 +1212,8 @@ void function FWAreaThreatLevelThink_Threaded()
         foreach( entity ent in mltEntArray )
         {
             //print( ent )
+            if( !IsValid( ent ) ) // since we're using a fake trigger, need to check this
+                continue
             if( ent.IsPlayer() || ent.IsNPC() )
             {
                 if( ent.IsTitan() && ent.GetTeam() != TEAM_MILITIA )
@@ -1654,6 +1664,7 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
 		
             // score event
             AddPlayerScore( attacker, "FortWarShieldDestroyed", attacker )
+            attacker.AddToPlayerGameStat( PGS_DEFENSE_SCORE, damageAmount )
         }
 
 		harvesterstruct.harvesterDamageTaken = harvesterstruct.harvesterDamageTaken + damageAmount // track damage for wave recaps
