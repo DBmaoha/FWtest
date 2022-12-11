@@ -1872,7 +1872,7 @@ void function InitPlayerObjective()
 
 void function CheckTitanAvaiable()
 {
-    while( true )
+    while( GetGameState() == eGameState.Playing )
     {
         foreach( player in GetPlayerArray() )
         {
