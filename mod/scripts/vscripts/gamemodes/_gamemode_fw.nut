@@ -996,7 +996,7 @@ void function FW_ForceAssaultInCamp( array<entity> guys, entity camp )
             if( IsValid( guy ) )
             {
                 guy.AssaultPoint( camp.GetOrigin() )
-                guy.AssaultSetGoalRadius( float( camp.kv.radius ) / 2 ) // the camp's radius / 2
+                guy.AssaultSetGoalRadius( float( camp.kv.radius ) ) // the camp's radius
                 guy.AssaultSetFightRadius( 0 )
                 oneGuyValid = true
             }
