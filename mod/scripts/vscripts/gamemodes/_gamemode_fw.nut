@@ -785,7 +785,7 @@ void function FWAiCampThink( CampSiteStruct campsite )
     string alertVarName = "fwCampAlert" + campId
     string stressVarName = "fwCampStress" + campId
 
-    while( GetGameState() == eGameState.Playing )
+    while( GamePlayingOrSuddenDeath() )
     {
         wait WAVE_STATE_TRANSITION_TIME
 
@@ -1192,7 +1192,7 @@ void function FWAreaThreatLevelThink_Threaded()
     bool warnImcTitanInArea
     bool warnMltTitanInArea
 
-    while( GetGameState() == eGameState.Playing )
+    while( GamePlayingOrSuddenDeath() )
     {
         //print( " imc threat level is: " + string( GetGlobalNetInt( "imcTowerThreatLevel" ) ) )
         //print( " mlt threat level is: " + string( GetGlobalNetInt( "milTowerThreatLevel" ) ) )
@@ -1342,6 +1342,7 @@ void function OnMegaTurretDamaged( entity turret, var damageInfo )
     entity attacker = DamageInfo_GetAttacker( damageInfo )
     float damageAmount = DamageInfo_GetDamage( damageInfo )
     int scriptType = DamageInfo_GetCustomDamageType( damageInfo )
+    int turretTeam = turret.GetTeam()
 
     if ( !damageSourceID && !damageAmount && !attacker )
         return
@@ -1367,6 +1368,14 @@ void function OnMegaTurretDamaged( entity turret, var damageInfo )
         damageSourceID == eDamageSourceId.mp_titancore_flame_wave_secondary
     ) // scorch's thermite damages
         DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/2 ) // nerf scorch
+
+    // faction dialogue
+    damageAmount = DamageInfo_GetDamage( damageInfo )
+    if( turret.GetHealth() - damageAmount <= 0 ) // turret killed this shot
+    {
+        if( GamePlayingOrSuddenDeath() )
+            PlayFactionDialogueToTeam( "fortwar_turretDestroyedFriendly", turretTeam )
+    }
 }
 
 void function InitTurretSettings()
@@ -1451,6 +1460,7 @@ void function TurretStateWatcher( TurretSiteStruct turretSite )
     overlayState.kv.solid = SOLID_VPHYSICS
     DispatchSpawn( overlayState )
 
+    svGlobal.levelEnt.EndSignal( "CleanUpEntitiesForRoundEnd" ) // end dialogues is good
     mapIcon.EndSignal( "OnDestroy" ) // mapIcon should be valid all time, tracking it
     batteryPort.EndSignal( "OnDestroy" ) // also track this
     overlayState.EndSignal( "OnDestroy" )
@@ -1486,8 +1496,6 @@ void function TurretStateWatcher( TurretSiteStruct turretSite )
                 SetTeam( batteryPort, TEAM_UNASSIGNED )
                 SetTeam( overlayState, TEAM_UNASSIGNED )
             }
-            if( killedThisFrame )
-                PlayFactionDialogueToTeam( "fortwar_turretDestroyedFriendly", turretTeam )
             SetGlobalNetInt( stateVarName, TURRET_DESTROYED_FLAG )
             continue
         }
