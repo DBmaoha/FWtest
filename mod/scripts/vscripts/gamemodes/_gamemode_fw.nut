@@ -139,6 +139,8 @@ void function GamemodeFW_Init()
     AddCallback_GameStateEnter( eGameState.Postmatch, OnFWGamePostmatch )
 
     AddSpawnCallback( "item_powerup", FWAddPowerUpIcon )
+    // check spawn point, WIP
+    AddSpawnCallback( "npc_titan", FWForcedTitanSpawnPoint )
 
     AddCallback_OnClientConnected( OnFWPlayerConnected )
     AddCallback_OnPlayerKilled( OnFWPlayerKilled )
@@ -314,6 +316,7 @@ void function OnFWGamePlaying()
 
 void function OnFWGamePostmatch()
 {
+    // TEMP!
     FWForceCleanUp()
     FWForceChangeMap()
 }
@@ -1202,6 +1205,12 @@ array<entity> function FW_GetTitanSpawnPointsForTeam( int team )
     }
 
     return validSpawnPoints
+}
+
+// WORKING IN PROGRESS
+void function FWForcedTitanSpawnPoint( entity titan )
+{
+
 }
 
 ////////////////////////////////////
