@@ -1723,17 +1723,19 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
 	if ( damageSourceID == eDamageSourceId.mp_titancore_laser_cannon )
 		DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 50 ) // laser core shreds super well for some reason
 
-    if ( damageSourceID == eDamageSourceId.mp_titanweapon_flightcore_rockets )
-        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 5 ) // flight core shreds super well for some reason
-
-     if ( damageSourceID == eDamageSourceId.mp_titanweapon_sniper ) // nerf northstar
+    if ( damageSourceID == eDamageSourceId.mp_titanweapon_sniper ) // nerf northstar, they can always do no-charge shots and deal same damage
         DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 2 )
 
 	if ( damageSourceID == eDamageSourceId.mp_titanweapon_salvo_rockets ||
-		damageSourceID == eDamageSourceId.mp_titanweapon_shoulder_rockets ||
-		damageSourceID == eDamageSourceId.mp_titanweapon_dumbfire_rockets
+		damageSourceID == eDamageSourceId.mp_titanweapon_shoulder_rockets
 	) // titan missiles
 		DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 3 )
+
+    if ( damageSourceID == eDamageSourceId.mp_titanweapon_flightcore_rockets )
+        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 5 ) // flight core shreds well
+
+    if ( damageSourceID == eDamageSourceId.mp_titanweapon_dumbfire_rockets )
+        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 10 ) // cluster missile shreds super well
 
 	if ( damageSourceID == eDamageSourceId.mp_titanweapon_meteor_thermite ||
 		damageSourceID == eDamageSourceId.mp_titanweapon_flame_wall ||
