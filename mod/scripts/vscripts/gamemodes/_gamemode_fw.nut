@@ -205,7 +205,7 @@ void function FWForceChangeMap_Threaded()
 //////////////////////////
 
 // in mp_grave, npcs will sometimes stuck underground, if they try to fire it will cause a engine error
-const float GRAVE_CHECK_HEIGHT = -3000 // npcs will stuck under -4000
+const float GRAVE_CHECK_HEIGHT = 1500 // the map's lowest grond is 1950+, npcs will stuck under -4000 or -400
 // the same once happened in mp_complex3, but it's unsure yet
 const float COMPLEX_CHECK_HEIGHT = -1
 
