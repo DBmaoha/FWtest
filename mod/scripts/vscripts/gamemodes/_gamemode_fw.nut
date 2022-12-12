@@ -385,7 +385,7 @@ void function InitFWScoreEvents()
 }
 
 // consider this means victim recently damaged harvester
-const float FW_DEFENSE_REQURED_TIME = 10.0
+const float TOWER_DEFENSE_REQURED_TIME = 10.0
 
 void function HandleFWPlayerKilledScoreEvent( entity victim, entity attacker )
 {
@@ -421,7 +421,7 @@ void function HandleFWPlayerKilledScoreEvent( entity victim, entity attacker )
         float damageTime = file.playerDamageHarvester[ victim ].recentDamageTime
 
         // is victim recently damaged havester?
-        if( damageTime <= Time() + FW_DEFENSE_REQURED_TIME )
+        if( damageTime + TOWER_DEFENSE_REQURED_TIME >= Time() )
         {
             scoreEvent = "FortWarTowerDefense" // you defend the tower!
             secondaryScore = POINTVALUE_FW_TOWER_DEFENSE
@@ -1721,21 +1721,26 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
 
 	// done damage adjustments here, since harvester prop's health is setting manually through damageAmount
 	if ( damageSourceID == eDamageSourceId.mp_titancore_laser_cannon )
-		DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/100 ) // laser core shreds super well for some reason
+		DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 50 ) // laser core shreds super well for some reason
 
-	if ( damageSourceID == eDamageSourceId.mp_titanweapon_flightcore_rockets ||
-		damageSourceID == eDamageSourceId.mp_titanweapon_salvo_rockets ||
+    if ( damageSourceID == eDamageSourceId.mp_titanweapon_flightcore_rockets )
+        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 5 ) // flight core shreds super well for some reason
+
+     if ( damageSourceID == eDamageSourceId.mp_titanweapon_sniper ) // nerf northstar
+        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 2 )
+
+	if ( damageSourceID == eDamageSourceId.mp_titanweapon_salvo_rockets ||
 		damageSourceID == eDamageSourceId.mp_titanweapon_shoulder_rockets ||
 		damageSourceID == eDamageSourceId.mp_titanweapon_dumbfire_rockets
 	) // titan missiles
-		DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/3 )
+		DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 3 )
 
 	if ( damageSourceID == eDamageSourceId.mp_titanweapon_meteor_thermite ||
 		damageSourceID == eDamageSourceId.mp_titanweapon_flame_wall ||
 		damageSourceID == eDamageSourceId.mp_titanability_slow_trap ||
 		damageSourceID == eDamageSourceId.mp_titancore_flame_wave_secondary
-	) // scorch's thermite damages
-		DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo )/4 ) // nerf scorch
+	) // scorch's thermite damages, nerf scorch
+		DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 4 )
 
 	HarvesterStruct harvesterstruct // current harveter's struct
 	if( friendlyTeam == TEAM_MILITIA )
@@ -1809,6 +1814,9 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
         int scoreDamage = int( DamageInfo_GetDamage( damageInfo ) )
         // score events
         attacker.AddToPlayerGameStat( PGS_ASSAULT_SCORE, scoreDamage )
+
+        // add to player structs
+        file.playerDamageHarvester[ attacker ].recentDamageTime = Time()
         file.playerDamageHarvester[ attacker ].storedDamage += scoreDamage
 
         // enough to earn score?
