@@ -1,35 +1,14 @@
-// this script is highly related with _gamemode_fw.nut!!!
+// this script is highly related to _gamemode_fw.nut!!!
 untyped
 global function InitTurretBatteryPort // only for fw turrets!
 
-//const asset BATTERY_PORT_USE_HINT_MODEL = $"models/weapons/bullets/mgl_grenade.mdl" // unused
 const float TURRET_BATTERY_REGEN_PERCENTAGE = 0.33
-const float TURRET_BATTERY_DAMAGE_PECENTAGE = 0.5
-const float TURRET_RESPAWN_HEALTH_PERCENTAGE = 0.75
+const float TURRET_RESPAWN_HEALTH_PERCENTAGE = 0.5
 const float TURRET_RESPAWN_SHIELD_PERCENTAGE = 0.5
-
-
-/* // using entity.s instead
-global struct BatteryPortStruct
-{
-    entity batteryPort
-    entity turret
-    bool hasBattery
-    float lastBatteryAppliedTime
-}
-
-struct
-{
-    array<BatteryPortStruct> allBatteryPorts
-} file
-*/
 
 void function InitTurretBatteryPort( entity batteryPort )
 {
     batteryPort.s.relatedTurret <- null             // entity, for saving batteryPort's nearest turret
-    //batteryPort.s.relatedTurretInfo <- null       // entity, using minimapstate now
-    //batteryPort.s.hasBattery <- false             // bool, batteryPackInside is enough
-    batteryPort.s.batteryPackInside <- null         // entity
     batteryPort.s.beingUsed <- false                // bool
     batteryPort.s.hackAvaliable <- true            // bool, for controlling hacking avaliablity
 
@@ -41,7 +20,6 @@ void function InitTurretBatteryPort( entity batteryPort )
     if( isBaseTurret ) // this is a base turret!
         batteryPort.s.hackAvaliable = false // it can never be hacked!
     turret.s.relatedBatteryPort = batteryPort // do it here
-    thread TrackTurretLifeTime( batteryPort, turret )
 
     if( isBaseTurret ) // this is a base turret!
         batteryPort.SetUsableByGroup( "friendlies pilot" ) // only show hint to friendlies
@@ -49,48 +27,6 @@ void function InitTurretBatteryPort( entity batteryPort )
         batteryPort.SetUsableByGroup( "pilot" ) // show hind to any pilots
     batteryPort.SetUsePrompts( "#FW_USE_GENERATOR_NO_BATTERY", "#FW_USE_GENERATOR_NO_BATTERY" ) // don't know what to use
     AddCallback_OnUseEntity( batteryPort, OnUseTurretBatteryPort )
-
-    /* // using entity.s instead
-    array<entity> allTurrets = GetNPCArrayByClass( "npc_turret_mega" )
-    entity turret = GetClosest( allTurrets, batteryPort.GetOrigin() ) // get nearest turret
-    BatteryPortStruct initStruct
-    initStruct.batteryPort = batteryPort
-    initStruct.turret = turret
-    initStruct.hasBattery = false
-    initStruct.lastBatteryAppliedTime = -1.0 // not used yet
-    */
-}
-
-void function TrackTurretLifeTime( entity batteryPort, entity turret )
-{
-    batteryPort.EndSignal( "OnDestroy" )
-    turret.EndSignal( "OnDestroy" )
-
-    while( true )
-    {
-        WaitFrame()
-        if( turret.GetShieldHealth() == 0 ) // no shield mooooooooooo
-            TryCleanUpBatteryInBatteryPort( batteryPort )
-        if( !IsAlive( turret ) ) // turret down
-        {
-            if( !turret.s.baseTurret )
-                batteryPort.s.hackAvaliable = true // this ports is able to be hack   
-        }
-    }
-}
-
-void function TryCleanUpBatteryInBatteryPort( entity batteryPort )
-{
-    entity battery = expect entity( batteryPort.s.batteryPackInside )
-    if( !IsValid( battery ) ) // already cleaned
-    {
-        batteryPort.s.batteryPackInside = null
-        return
-    }
-
-    battery.ClearParent()
-    battery.Destroy()
-    batteryPort.s.batteryPackInside = null
 }
 
 function OnUseTurretBatteryPort( entBeingUse, user )
@@ -129,13 +65,8 @@ void function TryUseTurretBatteryPort( entity player, entity batteryPort )
     // is this port able to be hacked
     bool portHackAvaliable = expect bool( batteryPort.s.hackAvaliable )
 
-    // port already has a battery, enemy try to remove it
-    if( IsValid( batteryPort.s.batteryPackInside ) && !validTeam ) 
-    {
-        waitthread PlayerRemoveBatteryPackFromPort( player, batteryPort )
-    }
     // player has a battery, team valid or able to hack && not a base turret
-    else if( !IsValid( batteryPort.s.batteryPackInside ) && PlayerHasBattery( player ) && ( validTeam || ( portHackAvaliable && !isBaseTurret ) ) )
+    if( PlayerHasBattery( player ) && ( validTeam || ( portHackAvaliable && !isBaseTurret ) ) )
     {
         // friendly try to apply one, or enemy try to hack this turret
         waitthread PlayerApplesBatteryPackToPort( player, batteryPort )
@@ -170,63 +101,61 @@ void function PlayerApplesBatteryPackToPort( entity player, entity batteryPort )
 	player.p.rodeoAnimTempProps.append( tempBattery3p )
 	player.p.rodeoAnimTempProps.append( tempBattery1p )
 
-    entity ref = CreateScriptMover() // use a ref to play animations
-    ref.SetOrigin( batteryPort.GetOrigin() + < 40,0,-35 > ) // offset for animation
-    //ref.SetAngles( < 0, player.EyeAngles().y, 0 > ) // sync player's eyeAngle, messy
-
 	OnThreadEnd(
-	function() : ( battery, batteryPort, player, ref, result )
+	function() : ( battery, batteryPort, player, result )
 		{
-			if ( IsValid( battery ) && !result.success ) // animation interrupted
+			if ( IsValid( battery ) ) // animation interrupted
             {
 				battery.Show()
                 Battery_StartFX( battery )
             }
 
             if ( IsValid( batteryPort ) )
+            {
                 batteryPort.s.beingUsed = false
+                batteryPort.Anim_Stop()
+            }
 
 			if ( IsValid( player ) )
             {
+                // restore control
                 DeployAndEnableWeapons( player )
+                ViewConeFree( player )
+
+                // clean up
                 ClearBatteryAnimTempProps( player )
-                //thread DelayedClearSyncedEntityForBatteryApply( player, batteryPort )
                 PutEntityInSafeSpot( player, player, null, player.GetOrigin() + <0, 0, 32>, player.GetOrigin() )
-
-                StopSoundOnEntity( batteryPort, "rodeo_medium_battery_return_ext" )
-
-                if( result.success ) // successfully applied battery
-                {
-                    ApplyBatteryToBatteryPort( player, batteryPort )
-                }
 
                 CleanUpBatterySequenceForPlayer( player )
             }
-
-            // remove ref after cleaned sequence
-            if ( IsValid( ref ) )
-                ref.Destroy()
 		}
 	)
 
 	FirstPersonSequenceStruct sequence
 	sequence.attachment = "REF" // only ref the batteryPort has
 
-    // these are baically atlas's battery animations
-	sequence.thirdPersonAnim 		= "pt_rodeo_ride_r_return_battery"
-	sequence.firstPersonAnim 		= "ptpov_rodeo_ride_r_return_battery"
+	sequence.thirdPersonAnim 		= "pt_mp_battery_port_insert" //"pt_rodeo_ride_r_return_battery"
+	sequence.firstPersonAnim 		= "ptpov_mp_battery_port_insert" //"ptpov_rodeo_ride_r_return_battery"
 
-	EmitSoundOnEntity( batteryPort, "rodeo_medium_battery_return_ext" ) // emit sound on port?
-
-	//player.SetSyncedEntity( ref )
+    // player stats
     HolsterAndDisableWeapons( player )
+    ViewConeZero( player )
 
-    float sequenceDuration = player.GetSequenceDuration( sequence.thirdPersonAnim )
-    // thread so we can set things inside sequence
-	thread FirstPersonSequence( sequence, player, ref )
+    batteryPort.Anim_Play( "bp_mp_battery_port_insert" )
 
-    wait sequenceDuration - 1.1 // don't play the recover animation
-    result.success = true
+    thread WaitForActivateBattery( player, battery, batteryPort )
+	waitthread FirstPersonSequence( sequence, player, batteryPort )
+}
+
+void function WaitForActivateBattery( entity player, entity battery, entity batteryPort )
+{
+    player.EndSignal( "OnDeath" )
+    player.EndSignal( "OnDestroy" )
+    player.EndSignal( "ScriptAnimStop" ) // so you can jump off animation
+    battery.EndSignal( "OnDestroy" )
+
+    player.WaitSignal( "BatteryActivate" ) // this is registered in _gamemode_fw.nut!
+    ApplyBatteryToBatteryPort( player, batteryPort )
 }
 
 void function ApplyBatteryToBatteryPort( entity player, entity batteryPort )
@@ -240,15 +169,7 @@ void function ApplyBatteryToBatteryPort( entity player, entity batteryPort )
 
     // player can apply battery
 
-    // hide icon
-    Battery_StopFX( battery )
-    battery.Minimap_Hide( TEAM_MILITIA, null )
-	battery.Minimap_Hide( TEAM_IMC, null )
-
-    // be in port
-    battery.SetParent( batteryPort, "REF" )
-    battery.SetOrigin( < 0,0,5 > ) // offset
-    batteryPort.s.batteryPackInside = battery
+    // disable hacking
     batteryPort.s.hackAvaliable = false // can't be hacked again until completely killed
 
     // change turret settings
@@ -264,8 +185,7 @@ void function ApplyBatteryToBatteryPort( entity player, entity batteryPort )
         if( !IsValid( turret ) ) // replace failed!
             return
         batteryPort.s.relatedTurret = turret
-        thread TrackTurretLifeTime( batteryPort, turret ) // start a new track
-        turretReplaced = true // if turret has been replaced, must reset team!
+        turretReplaced = true // if turret has been replaced, mostly reset team!
     }
 
     bool teamChanged = false
@@ -282,11 +202,12 @@ void function ApplyBatteryToBatteryPort( entity player, entity batteryPort )
         newHealth = int ( turret.GetMaxHealth() * TURRET_RESPAWN_HEALTH_PERCENTAGE )
     int newShield = turret.GetShieldHealthMax()
     if( turretReplaced ) // replaced turret will spawn with 50% shield
-        newShield = int ( turret.GetMaxHealth() * TURRET_RESPAWN_SHIELD_PERCENTAGE )
+        newShield = int ( turret.GetShieldHealthMax() * TURRET_RESPAWN_SHIELD_PERCENTAGE )
+    // only do team score event if turret's shields down, encourage players to hack more turrets
+    bool additionalScore = turret.GetShieldHealth() <= 0
     // this can be too much powerful
     turret.SetHealth( newHealth )
     turret.SetShieldHealth( newShield )
-    EmitSoundOnEntityOnlyToPlayer( player, player, "UI_TitanBattery_Pilot_Give_TitanBattery" )
 
     // score event
     string scoreEvent = "FortWarForwardConstruction"
@@ -294,20 +215,27 @@ void function ApplyBatteryToBatteryPort( entity player, entity batteryPort )
     if( isBaseTurret ) // this is a base turret
     {
         scoreEvent = "FortWarBaseConstruction"
-        secondaryScore = POINTVALUE_FW_FORWARD_CONSTRUCTION
+        secondaryScore = POINTVALUE_FW_BASE_CONSTRUCTION
     }
     AddPlayerScore( player, scoreEvent, player ) // player themself gets more meter
     player.AddToPlayerGameStat( PGS_DEFENSE_SCORE, secondaryScore )
 
-    // get turrets alive, for adding scores
-    string teamTurretCount = GetTeamAliveTurretCount_ReturnString( playerTeam )
-    foreach( entity friendly in GetPlayerArrayOfTeam( playerTeam ) )
-        AddPlayerScore( friendly, "FortWarTeamTurretControlBonus_" + teamTurretCount, friendly )
+    // only do team score event if turret's shields down
+    if( additionalScore )
+    {
+        // get turrets alive, for adding scores
+        string teamTurretCount = GetTeamAliveTurretCount_ReturnString( playerTeam )
+        foreach( entity friendly in GetPlayerArrayOfTeam( playerTeam ) )
+            AddPlayerScore( friendly, "FortWarTeamTurretControlBonus_" + teamTurretCount, friendly )
 
-    // faction dialogue
-    //if( !teamChanged ) // this means player not hacking this turret
-    // "fortwar_turretDeployFriendly" wasn't a right dialogue, always play this.
-    PlayFactionDialogueToTeam( "fortwar_turretShieldedByFriendlyPilot", playerTeam )
+        PlayFactionDialogueToTeam( "fortwar_turretShieldedByFriendlyPilot", playerTeam )
+    }
+
+    // clean up
+    ClearBatteryAnimTempProps( player )
+    
+    // all things done, destroy this batt
+    battery.Destroy()
 }
 
 // this will get english name of the count, since the "FortWarTeamTurretControlBonus_" score event uses it
@@ -339,127 +267,6 @@ string function GetTeamAliveTurretCount_ReturnString( int team )
     return ""
 }
 
-void function PlayerRemoveBatteryPackFromPort( entity player, entity batteryPort )
-{
-    table result = {}
-    result.success <- false
-    batteryPort.s.beingUsed = true
-
-    entity battery = expect entity( batteryPort.s.batteryPackInside )
-    if( !IsValid( battery ) )
-        return
-    if( !( "animationBattery" in player.s ) )
-        player.s.animationBattery <- null
-    player.s.animationBattery = battery
-
-	entity tempBattery3p
-	tempBattery3p = CreatePropDynamic( RODEO_BATTERY_MODEL_FOR_RODEO_ANIMS )
-	tempBattery3p.SetParent( player, "R_HAND", false, 0.0 )
-	tempBattery3p.RemoveFromSpatialPartition()
-	tempBattery3p.Hide()
-
-	entity pilotFirstPersonProxy = player.GetFirstPersonProxy()
-	entity tempBattery1p = CreatePropDynamic( RODEO_BATTERY_MODEL_FOR_RODEO_ANIMS )
-	tempBattery1p.SetParent( pilotFirstPersonProxy, "R_HAND", false, 0.0 )
-	tempBattery1p.RemoveFromSpatialPartition()
-	tempBattery1p.Hide()
-
-	player.p.rodeoAnimTempProps.append( tempBattery1p )
-	player.p.rodeoAnimTempProps.append( tempBattery3p )
-
-    AddAnimEvent( player, "rodeo_battery_show", PortBatteryRemoval_ShowBattery ) //Consider adding this in add player
-
-    entity ref = CreateScriptMover() // use a ref to play animations
-    ref.SetOrigin( batteryPort.GetOrigin() + < 40,0,-35 > ) // offset for animation
-
-	OnThreadEnd(
-		function() : ( player, batteryPort, battery, ref, result )
-		{
-            if ( IsValid( battery ) && !result.success ) // animation interrupted
-				battery.Show()
-
-            if ( IsValid( batteryPort ) )
-                batteryPort.s.beingUsed = false
-
-            if ( IsValid( player ) )
-            {
-                DeployAndEnableWeapons( player )
-                ClearBatteryAnimTempProps( player )
-                PutEntityInSafeSpot( player, player, null, player.GetOrigin() + <0, 0, 32>, player.GetOrigin() )
-                StopSoundOnEntity( batteryPort, "rodeo_medium_battery_steal_ext" )
-
-                if( result.success ) // successfully removed battery
-                {
-                    RemoveBatteryFromPort( player, batteryPort )
-                }
-
-                if (  HasAnimEvent( player, "rodeo_battery_show" )  )
-				    DeleteAnimEvent( player, "rodeo_battery_show" )
-
-                CleanUpBatterySequenceForPlayer( player )
-            }
-
-            // remove ref after cleaned sequence
-            if ( IsValid( ref ) )
-                ref.Destroy()
-		}
-	)
-
-	FirstPersonSequenceStruct sequence
-	sequence.attachment = "ref"
-	sequence.thirdPersonAnim = "pt_rodeo_ride_r_hijack_battery"
-	sequence.firstPersonAnim = "ptpov_rodeo_ride_r_hijack_battery"
-
-	EmitSoundOnEntity( batteryPort, "rodeo_medium_battery_steal_ext" )
-
-    HolsterAndDisableWeapons( player )
-
-	float sequenceDuration = player.GetSequenceDuration( sequence.thirdPersonAnim )
-    // thread so we can set things inside sequence
-	thread FirstPersonSequence( sequence, player, ref )
-
-    wait sequenceDuration - 0.1 // shorter sequence is enough
-    result.success = true
-}
-
-void function RemoveBatteryFromPort( entity player, entity batteryPort )
-{
-    entity battery = expect entity( batteryPort.s.batteryPackInside )
-    if( !IsValid( battery ) )
-        return
-    // destroy the battery, don't give it to any players
-    TryCleanUpBatteryInBatteryPort( batteryPort )
-
-    entity turret = expect entity( batteryPort.s.relatedTurret )
-    if( !IsAlive( turret ) ) // turret has been destroyed!
-        return
-
-    // damaging turret
-    // take damage won't work, idk why
-    //int damageAmount = int( turret.GetMaxHealth() * 0.5 ) // not just shield damage
-    //turret.TakeDamage( damageAmount, player, player, { damageSourceId = eDamageSourceId.rodeo_battery_removal, scriptType = damageTypes.rodeoBatteryRemoval } )
-    // directly set turret's health
-    turret.SetHealth( max( 0, turret.GetHealth() - ( turret.GetMaxHealth() * TURRET_BATTERY_DAMAGE_PECENTAGE ) ) ) // take same damage than applying
-    turret.SetShieldHealth( 0 ) // clean all shields left
-    EmitSoundOnEntityOnlyToPlayer( player, player, "UI_TitanBattery_Pilot_Take_TitanBattery" )
-
-    // give player titan meter
-    AddPlayerScore( player, "PilotBatteryStolen", player )
-}
-
-void function PortBatteryRemoval_ShowBattery( entity player )
-{
-    // hide the real battery inside
-    entity batteryToHide = expect entity( player.s.animationBattery )
-    if( IsValid( batteryToHide ) )
-        batteryToHide.Hide()
-
-	foreach( tempProp in player.p.rodeoAnimTempProps )
-	{
-		tempProp.Show()
-	}
-}
-
 // get nearest turret, consider it belongs to the port
 entity function GetNearestMegaTurret( entity ent )
 {
@@ -476,14 +283,6 @@ void function CleanUpBatterySequenceForPlayer( entity player )
     player.Anim_Stop()
 }
 
-void function DelayedClearSyncedEntityForBatteryApply( entity player, entity batteryPort )
-{
-    WaitFrame()
-
-    if ( IsValid( player ) && IsValid( batteryPort ) )
-        player.SetSyncedEntity( null )
-}
-
 void function ClearBatteryAnimTempProps( entity player )
 {
 	foreach( tempProp in player.p.rodeoAnimTempProps )
@@ -494,19 +293,3 @@ void function ClearBatteryAnimTempProps( entity player )
 
 	player.p.rodeoAnimTempProps.clear()
 }
-
-/* // using entity.s instead
-BatteryPortStruct function GetCurrentStructFromBatteryPort( entity batteryPort )
-{
-    BatteryPortStruct tempStruct
-    foreach( BatteryPortStruct portStruct in file.allBatteryPorts )
-    {
-        if( portStruct.batteryPort == batteryPort )
-        {
-            tempStruct = portStruct
-            break
-        }
-    }
-    return tempStruct
-}
-*/
