@@ -862,13 +862,9 @@ void function FWAiCampThink( CampSiteStruct campsite )
 
             if( killsNeeded <= 0 ) // check if needs more kills
             {
-                if( alertLevel + 1 >= FW_MAX_LEVELS - 1 ) // next upgrade reached max level!
-                    SetGlobalNetInt( alertVarName, FW_MAX_LEVELS - 1 )
-                else
-                    SetGlobalNetInt( alertVarName, alertLevel + 1 ) // normal level up
                 SetGlobalNetInt( stressVarName, 0 ) // empty
                 // can't use float rn
-                //SetGlobalNetFloat( stressVarName, 1.0 ) // refill
+                //SetGlobalNetFloat( stressVarName, 0.0 ) // empty
                 AddIgnoredCountToOtherCamps( campsite )
                 break
             }
