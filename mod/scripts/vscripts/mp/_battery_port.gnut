@@ -120,7 +120,7 @@ void function PlayerApplesBatteryPackToPort( entity player, entity batteryPort )
             {
                 // restore control
                 DeployAndEnableWeapons( player )
-                ViewConeFree( player )
+                //ViewConeFree( player ) // no need to lock viewcone
 
                 // clean up
                 ClearBatteryAnimTempProps( player )
@@ -139,7 +139,7 @@ void function PlayerApplesBatteryPackToPort( entity player, entity batteryPort )
 
     // player stats
     HolsterAndDisableWeapons( player )
-    ViewConeZero( player )
+    //ViewConeZero( player ) // no need to lock viewcone
 
     batteryPort.Anim_Play( "bp_mp_battery_port_insert" )
 
