@@ -231,9 +231,6 @@ void function ApplyBatteryToBatteryPort( entity player, entity batteryPort )
         PlayFactionDialogueToTeam( "fortwar_turretShieldedByFriendlyPilot", playerTeam )
     }
 
-    // clean up
-    ClearBatteryAnimTempProps( player )
-    
     // all things done, destroy this batt
     battery.Destroy()
 }
