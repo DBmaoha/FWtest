@@ -1717,7 +1717,8 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
 		DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 50 ) // laser core shreds super well for some reason
 
     if ( damageSourceID == eDamageSourceId.mp_titanweapon_sniper ||
-        damageSourceID == eDamageSourceId.mp_titanweapon_leadwall ) // nerf northstar an ronin, northstars can always do no-charge shots and deal same damage
+        damageSourceID == eDamageSourceId.mp_titanweapon_leadwall 
+    ) // nerf northstar an ronin, northstars can always do no-charge shots and deal same damage
         DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 2 )
 
 	if ( damageSourceID == eDamageSourceId.mp_titanweapon_salvo_rockets ||
