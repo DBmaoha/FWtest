@@ -160,22 +160,6 @@ void function GamemodeFW_Init()
 ///// TEMP FUNCTIONS /////
 //////////////////////////
 
-// temp, in some maps( complex, grave ) npcs being cleaned up will fire outside of the map and crash the server
-void function FWForceCleanUp()
-{
-    foreach( entity player in GetPlayerArray() )
-    {
-        player.ClearParent() // so npcs won't have a player parented
-    }
-
-    foreach( entity npc in GetNPCArray() )
-    {
-        // this might able to get npcs cleaned safely
-        npc.ClearParent()
-        npc.Destroy()
-    }
-}
-
 // temp, force change maps, since i don't know how to use a playlist
 void function FWForceChangeMap()
 {
@@ -317,7 +301,6 @@ void function OnFWGamePlaying()
 void function OnFWGamePostmatch()
 {
     // TEMP!
-    FWForceCleanUp()
     FWForceChangeMap()
 }
 
