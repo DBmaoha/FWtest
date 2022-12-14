@@ -724,6 +724,9 @@ void function InitFWPlayers( entity player )
 
     // objective stuff
     player.s.notifiedTitanfall <- false
+
+    // notification stuff
+    player.s.lastTurretNotifyTime <- 0.0
 }
 
 ///////////////////////////////////////////
@@ -1403,6 +1406,9 @@ entity function FW_ReplaceMegaTurret( entity perviousTurret )
     return turret
 }
 
+// avoid notifications overrides itself
+const float TURRET_NOTIFICATION_DEBOUNCE = 10.0
+
 void function OnMegaTurretDamaged( entity turret, var damageInfo )
 {
     int damageSourceID = DamageInfo_GetDamageSourceIdentifier( damageInfo )
@@ -1419,7 +1425,15 @@ void function OnMegaTurretDamaged( entity turret, var damageInfo )
         if ( !attacker.IsTitan() && !IsSuperSpectre( attacker ) )
         {
             if( attacker.IsPlayer() && attacker.GetTeam() != turret.GetTeam() ) // good to have
-                MessageToPlayer( attacker, eEventNotifications.TurretTitanDamageOnly )
+            {
+                // avoid notifications overrides itself
+                if( attacker.s.lastTurretNotifyTime + TURRET_NOTIFICATION_DEBOUNCE < Time() )
+                {
+                    MessageToPlayer( attacker, eEventNotifications.Clear ) // clean up last message
+                    MessageToPlayer( attacker, eEventNotifications.TurretTitanDamageOnly )
+                    attacker.s.lastTurretNotifyTime = Time()
+                }
+            }
             DamageInfo_SetDamage( damageInfo, turret.GetShieldHealth() ) // destroy shields
             return
         }
