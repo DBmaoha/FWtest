@@ -50,7 +50,7 @@ const int FW_SPECTRE_MAX_DEPLOYED = 8
 const int FW_REAPER_MAX_DEPLOYED = 1
 
 // if other camps been cleaned many times, we levelDown
-const int FW_IGNORE_NEEDED = 2
+const int FW_CAMP_IGNORE_NEEDED = 2
 
 // debounce for showing damaged infos
 const float FW_HARVESTER_DAMAGED_DEBOUNCE = 5.0
@@ -604,7 +604,6 @@ void function LoadEntities()
                     entity turret = CreateNPC( "npc_turret_mega", TEAM_UNASSIGNED, info_target.GetOrigin(), info_target.GetAngles() )
                     SetSpawnOption_AISettings( turret, "npc_turret_mega_fortwar" )
                     SetDefaultMPEnemyHighlight( turret ) // for sonar highlights to work
-                    SetTeam( turret, info_target.GetTeam() ) // need to set this for batteryPorts get teams!
                     AddEntityCallback_OnDamaged( turret, OnMegaTurretDamaged )
                     DispatchSpawn( turret )
 
@@ -761,38 +760,51 @@ void function FWAddPowerUpIcon( entity powerup )
 void function InitFWCampSites()
 {
     // camps don't have a id, set them manually
-    foreach( int index, CampSiteStruct camp in file.fwCampSites )
+    foreach( int index, CampSiteStruct campsite in file.fwCampSites )
     {
+        entity campInfo = campsite.camp
+        float radius = float( campInfo.kv.radius )
+
+        // get droppod spawns
+        foreach ( entity spawnpoint in SpawnPoints_GetDropPod() )
+            if ( Distance( campInfo.GetOrigin(), spawnpoint.GetOrigin() ) < radius )
+                campsite.validDropPodSpawns.append( spawnpoint )
+
+        // get titan spawns
+        foreach ( entity spawnpoint in SpawnPoints_GetTitan() )
+            if ( Distance( campInfo.GetOrigin(), spawnpoint.GetOrigin() ) < radius )
+                campsite.validTitanSpawns.append( spawnpoint )
+
         if ( index == 0 )
         {
-            camp.campId = "A"
+            campsite.campId = "A"
             SetGlobalNetInt( "fwCampAlertA", 0 )
-            SetGlobalNetInt( "fwCampStressA", 1 )
+            SetGlobalNetInt( "fwCampStressA", 0 ) // start from empty
             // can't use float rn
             //SetGlobalNetFloat( "fwCampStressA", 1.0 )
-            SetLocationTrackerID( camp.tracker, 0 )
+            SetLocationTrackerID( campsite.tracker, 0 )
             file.trackedCampNPCSpawns["A"] <- {}
             continue
         }
         if ( index == 1 )
         {
-            camp.campId = "B"
+            campsite.campId = "B"
             SetGlobalNetInt( "fwCampAlertB", 0 )
-            SetGlobalNetInt( "fwCampStressB", 1 )
+            SetGlobalNetInt( "fwCampStressB", 0 ) // start from empty
             // can't use float rn
             //SetGlobalNetFloat( "fwCampStressB", 1.0 )
-            SetLocationTrackerID( camp.tracker, 1 )
+            SetLocationTrackerID( campsite.tracker, 1 )
             file.trackedCampNPCSpawns["B"] <- {}
             continue
         }
         if ( index == 2 )
         {
-            camp.campId = "C"
+            campsite.campId = "C"
             SetGlobalNetInt( "fwCampAlertC", 0 )
-            SetGlobalNetInt( "fwCampStressC", 1 )
+            SetGlobalNetInt( "fwCampStressC", 0 ) // start from empty
             // can't use float rn
             //SetGlobalNetFloat( "fwCampStressC", 1.0 )
-            SetLocationTrackerID( camp.tracker, 2 )
+            SetLocationTrackerID( campsite.tracker, 2 )
             file.trackedCampNPCSpawns["C"] <- {}
             continue
         }
@@ -808,7 +820,6 @@ void function InitCampTracker( entity camp )
 
     entity placementHelper = CreateEntity( "info_placement_helper" )
     placementHelper.SetOrigin( camp.GetOrigin() ) // tracker needs a owner to display
-    //prop.SetModel( $"models/dev/empty_model.mdl" )
     campsite.info = placementHelper
     DispatchSpawn( placementHelper )
 
@@ -819,16 +830,6 @@ void function InitCampTracker( entity camp )
     campsite.tracker = tracker
     SetLocationTrackerRadius( tracker, radius )
     DispatchSpawn( tracker )
-
-    // get droppod spawns
-    foreach ( entity spawnpoint in SpawnPoints_GetDropPod() )
-        if ( Distance( camp.GetOrigin(), spawnpoint.GetOrigin() ) < radius )
-            campsite.validDropPodSpawns.append( spawnpoint )
-
-    // get titan spawns
-    foreach ( entity spawnpoint in SpawnPoints_GetTitan() )
-        if ( Distance( camp.GetOrigin(), spawnpoint.GetOrigin() ) < radius )
-            campsite.validTitanSpawns.append( spawnpoint )
 }
 
 void function StartFWCampThink()
@@ -848,20 +849,25 @@ void function FWAiCampThink( CampSiteStruct campsite )
     string alertVarName = "fwCampAlert" + campId
     string stressVarName = "fwCampStress" + campId
 
+
+    bool firstSpawn = true
     while( GamePlayingOrSuddenDeath() )
     {
         wait WAVE_STATE_TRANSITION_TIME
 
         int alertLevel = GetGlobalNetInt( alertVarName )
         //print( "campsite" + campId + ".ignoredSinceLastClean: " + string( campsite.ignoredSinceLastClean ) )
-        if( campsite.ignoredSinceLastClean >= FW_IGNORE_NEEDED && alertLevel > 1 ) // has been ignored many times, level > 1
-        {
-            // reset level
-            alertLevel = 0
-        }
-        // update netVars
+        if( campsite.ignoredSinceLastClean >= FW_CAMP_IGNORE_NEEDED && alertLevel > 0 ) // has been ignored many times, level > 0
+            alertLevel = 0 // reset level
+        else if( !firstSpawn ) // not the first spawn!
+            alertLevel += 1 // level up
+
+        if( alertLevel >= FW_MAX_LEVELS - 1 ) // reached max level?
+            alertLevel = FW_MAX_LEVELS - 1 // stay
+
+        // update netVars, don't know how client update these, sometimes they can't catch up
         SetGlobalNetInt( alertVarName, alertLevel )
-        SetGlobalNetInt( stressVarName, 1 )
+        SetGlobalNetInt( stressVarName, 1 ) // refill
         // can't use float rn
         //SetGlobalNetFloat( stressVarName, 1.0 )
 
@@ -931,6 +937,9 @@ void function FWAiCampThink( CampSiteStruct campsite )
 
             lastNpcLeft = file.trackedCampNPCSpawns[campId][npcToSpawn]
         }
+
+        // first loop ends
+        firstSpawn = false
     }
 }
 
