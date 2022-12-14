@@ -603,6 +603,7 @@ void function LoadEntities()
                     entity turret = CreateNPC( "npc_turret_mega", TEAM_UNASSIGNED, info_target.GetOrigin(), info_target.GetAngles() )
                     SetSpawnOption_AISettings( turret, "npc_turret_mega_fortwar" )
                     SetDefaultMPEnemyHighlight( turret ) // for sonar highlights to work
+                    SetTeam( turret, info_target.GetTeam() ) // need to set this for batteryPorts get teams!
                     AddEntityCallback_OnDamaged( turret, OnMegaTurretDamaged )
                     DispatchSpawn( turret )
 
@@ -1560,6 +1561,7 @@ void function TurretStateWatcher( TurretSiteStruct turretSite )
                 SetTeam( mapIcon, TEAM_UNASSIGNED )
                 SetTeam( batteryPort, TEAM_UNASSIGNED )
                 SetTeam( overlayState, TEAM_UNASSIGNED )
+                batteryPort.SetUsableByGroup( "pilot" ) // show hints to any pilot
             }
             SetGlobalNetInt( stateVarName, TURRET_DESTROYED_FLAG )
             continue
@@ -1573,6 +1575,9 @@ void function TurretStateWatcher( TurretSiteStruct turretSite )
         SetTeam( mapIcon, iconTeam ) // update icon's team
         SetTeam( batteryPort, turretTeam ) // update batteryPort's team
         SetTeam( overlayState, iconTeam ) // update overlayEnt's team
+
+        if( turretTeam != TEAM_BOTH && turretTeam != TEAM_UNASSIGNED ) // not a natural turret nor dead
+            batteryPort.SetUsableByGroup( "friendlies pilot" ) // only show hint to friendlies
 
         float lastDamagedTime = expect float( turret.s.lastDamagedTime )
         int stateFlag = TURRET_NATURAL_FLAG
