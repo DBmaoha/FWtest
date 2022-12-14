@@ -1772,28 +1772,34 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
 	if ( damageSourceID == eDamageSourceId.mp_titancore_laser_cannon )
 		DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 50 ) // laser core shreds super well for some reason
 
+    // plasma railgun can always do no-charge shots and deal same damage
+    // leadwall have high pilot damage so works really well aginst harvester
     if ( damageSourceID == eDamageSourceId.mp_titanweapon_sniper ||
-        damageSourceID == eDamageSourceId.mp_titanweapon_leadwall 
-    ) // nerf northstar an ronin, northstars can always do no-charge shots and deal same damage
+        damageSourceID == eDamageSourceId.mp_titanweapon_leadwall
+    ) // nerf northstar an ronin
         DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 2 )
 
+    // missiles mostly have high pilot damage so works really well aginst harvester
 	if ( damageSourceID == eDamageSourceId.mp_titanweapon_salvo_rockets ||
 		damageSourceID == eDamageSourceId.mp_titanweapon_shoulder_rockets
 	) // titan missiles
 		DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 3 )
 
-    if ( damageSourceID == eDamageSourceId.mp_titanweapon_flightcore_rockets )
-        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 5 ) // flight core shreds well
+    if ( damageSourceID == eDamageSourceId.mp_titanweapon_flightcore_rockets ) // flight core shreds well
+        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 5 ) 
 
-    if ( damageSourceID == eDamageSourceId.mp_titanweapon_dumbfire_rockets )
-        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 10 ) // cluster missile shreds super well
+    // cluster missle is very effective against non-moving targets
+    if ( damageSourceID == eDamageSourceId.mp_titanweapon_dumbfire_rockets ) // cluster missile shreds super well
+        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 10 ) 
 
-	if ( damageSourceID == eDamageSourceId.mp_titanweapon_meteor_thermite ||
+    // scorch's thermites is very effective against non-moving targets
+	if ( damageSourceID == eDamageSourceId.mp_titanweapon_heat_shield || 
+        damageSourceID == eDamageSourceId.mp_titanweapon_meteor_thermite ||
 		damageSourceID == eDamageSourceId.mp_titanweapon_flame_wall ||
 		damageSourceID == eDamageSourceId.mp_titanability_slow_trap ||
 		damageSourceID == eDamageSourceId.mp_titancore_flame_wave_secondary
 	) // scorch's thermite damages, nerf scorch
-		DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 4 )
+		DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 5 )
 
 	HarvesterStruct harvesterstruct // current harveter's struct
 	if( friendlyTeam == TEAM_MILITIA )
