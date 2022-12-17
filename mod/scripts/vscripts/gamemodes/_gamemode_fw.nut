@@ -199,11 +199,11 @@ const array<string> HACK_CLEANUP_MAPS =
 //if npcs outside the map try to fire( like in death animation ), it will cause a engine error
 
 // in mp_grave, npcs will sometimes stuck underground
-const float GRAVE_CHECK_HEIGHT = 1500 // the map's lowest grond is 1950+, npcs will stuck under -4000 or -400
+const float GRAVE_CHECK_HEIGHT = 1700 // the map's lowest ground is 1950+, npcs will stuck under -4000 or -400
 // in mp_homestead, npcs will sometimes stuck in the sky
-const float HOMESTEAD_CHECK_HIEGHT = 9000 // the map's highest part is 7868+, npcs will stuck above 13800+
-// the same once happened in mp_complex3, but it's unsure yet
-const float COMPLEX_CHECK_HEIGHT = -1
+const float HOMESTEAD_CHECK_HIEGHT = 8000 // the map's highest part is 7868+, npcs will stuck above 13800+
+// in mp_complex3, npcs will sometimes stuck in the sky
+const float COMPLEX_CHECK_HEIGHT = 7000 // the map's highest part is 6716+, npcs will stuck above 9700+
 
 // do a hack
 void function HACK_ForceDestroyNPCs()
@@ -238,6 +238,20 @@ void function HACK_ForceDestroyNPCs_Threaded()
                 if( !IsValid( npc.GetParent() ) && !npc.e.isHotDropping )
                 {
                     if( npc.GetOrigin().z >= HOMESTEAD_CHECK_HIEGHT )
+                    {
+                        npc.Destroy()
+                    }
+                }
+            }
+        }
+        if( mapName == "mp_complex3" )
+        {
+            foreach( entity npc in GetNPCArray() )
+            {
+                // neither spawning from droppod nor hotdropping
+                if( !IsValid( npc.GetParent() ) && !npc.e.isHotDropping )
+                {
+                    if( npc.GetOrigin().z >= COMPLEX_CHECK_HEIGHT )
                     {
                         npc.Destroy()
                     }
@@ -618,7 +632,8 @@ void function LoadEntities()
 
                     // minimap icons holder
                     entity minimapstate = CreateEntity( "prop_script" )
-                    minimapstate.SetValueForModelKey( $"models/communication/flag_base.mdl" ) // info_target.GetModelName() will get big models even turret's! thanks to respawn
+                    minimapstate.SetValueForModelKey( info_target.GetModelName() ) // these info must have model to work
+                    minimapstate.Hide() // hide the model! it will still work on minimaps
                     minimapstate.SetOrigin( info_target.GetOrigin() )
                     minimapstate.SetAngles( info_target.GetAngles() )
                     //SetTeam( minimapstate, info_target.GetTeam() ) // setTeam() for icons is done in TurretStateWatcher()
