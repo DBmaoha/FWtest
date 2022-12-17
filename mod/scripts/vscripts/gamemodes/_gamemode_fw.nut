@@ -194,7 +194,8 @@ void function FWForceChangeMap_Threaded()
 const array<string> HACK_CLEANUP_MAPS =
 [
     "mp_grave",
-    "mp_homestead"
+    "mp_homestead",
+    "mp_complex3"
 ]
 
 //if npcs outside the map try to fire( like in death animation ), it will cause a engine error
@@ -1795,10 +1796,11 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
 		DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 50 ) // laser core shreds super well for some reason
 
     // plasma railgun can always do no-charge shots and deal same damage
+    if ( damageSourceID == eDamageSourceId.mp_titanweapon_sniper ) // nerf northstar
+        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 3 )
+
     // leadwall have high pilot damage so works really well aginst harvester
-    if ( damageSourceID == eDamageSourceId.mp_titanweapon_sniper ||
-        damageSourceID == eDamageSourceId.mp_titanweapon_leadwall
-    ) // nerf northstar an ronin
+    if ( damageSourceID == eDamageSourceId.mp_titanweapon_leadwall ) // nerf ronin
         DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 2 )
 
     // missiles mostly have high pilot damage so works really well aginst harvester
