@@ -667,8 +667,6 @@ void function LoadEntities()
                     prop.kv.fadedist = 10000 // try not to fade
                     InitTurretBatteryPort( prop )
                     break
-                //case "script_power_up_other":
-                //    entity powerUp = CreateEntity( "item_powerup" )
 			}
 		}
 	}
