@@ -1560,6 +1560,7 @@ void function TurretStateWatcher( TurretSiteStruct turretSite )
     // battery overlay icons holder
     entity overlayState = CreateEntity( "prop_script" )
     overlayState.SetValueForModelKey( $"models/communication/flag_base.mdl" ) // requires a model to show overlays
+    overlayState.Hide() // this can still show players overlay icons
     overlayState.SetOrigin( batteryPort.GetOrigin() ) // tracking batteryPort's positions
     overlayState.SetAngles( batteryPort.GetAngles() )
     overlayState.kv.solid = SOLID_VPHYSICS
