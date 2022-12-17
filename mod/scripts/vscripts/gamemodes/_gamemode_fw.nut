@@ -2,18 +2,6 @@ untyped
 global function GamemodeFW_Init
 global function RateSpawnpoints_FW
 
-// i don't know how to use playlists in keyvalues folder, let's change maps manually
-const array<string> FW_ALLOWED_MAPS =
-[
-    "mp_forwardbase_kodai",
-    "mp_grave",
-    "mp_homestead",
-    "mp_thaw",
-    "mp_eden",
-    "mp_crashsite3",
-    "mp_complex3"
-]
-
 // for battery_port.gnut to work
 global function FW_ReplaceMegaTurret
 
@@ -137,7 +125,6 @@ void function GamemodeFW_Init()
     AddCallback_EntitiesDidLoad( LoadEntities )
     AddCallback_GameStateEnter( eGameState.Prematch, OnFWGamePrematch )
     AddCallback_GameStateEnter( eGameState.Playing, OnFWGamePlaying )
-    AddCallback_GameStateEnter( eGameState.Postmatch, OnFWGamePostmatch )
 
     AddSpawnCallback( "item_powerup", FWAddPowerUpIcon )
     // check spawn point, WIP
@@ -153,37 +140,7 @@ void function GamemodeFW_Init()
     // so many things in battle, this is required to avoid crash!
     ServerCommand( "sv_max_props_multiplayer 200000" )
     ServerCommand( "sv_max_prop_data_dwords_multiplayer 300000" )
-
-    ClassicMP_ForceDisableEpilogue( true ) // temp
 }
-
-//////////////////////////
-///// TEMP FUNCTIONS /////
-//////////////////////////
-
-// temp, force change maps, since i don't know how to use a playlist
-void function FWForceChangeMap()
-{
-    thread FWForceChangeMap_Threaded()
-}
-
-void function FWForceChangeMap_Threaded()
-{
-    wait 5
-
-    string mapName = GetMapName()
-    int curMapIdx = FW_ALLOWED_MAPS.find( mapName )
-
-    int nextMapIdx = curMapIdx + 1
-    if( nextMapIdx + 1 > FW_ALLOWED_MAPS.len() ) // last map
-        nextMapIdx = 0
-
-    GameRules_ChangeMap( FW_ALLOWED_MAPS[ nextMapIdx ], "fw" )
-}
-
-//////////////////////////////
-///// TEMP FUNCTIONS END /////
-//////////////////////////////
 
 
 
@@ -194,7 +151,8 @@ void function FWForceChangeMap_Threaded()
 const array<string> HACK_CLEANUP_MAPS =
 [
     "mp_grave",
-    "mp_homestead"
+    "mp_homestead",
+    "mp_complex3"
 ]
 
 //if npcs outside the map try to fire( like in death animation ), it will cause a engine error
@@ -339,12 +297,6 @@ void function OnFWGamePlaying()
     FWPlayerObjectiveState()
 
     HACK_ForceDestroyNPCs()
-}
-
-void function OnFWGamePostmatch()
-{
-    // TEMP!
-    FWForceChangeMap()
 }
 
 void function OnFWPlayerConnected( entity player )
@@ -800,9 +752,7 @@ void function InitFWCampSites()
         {
             campsite.campId = "A"
             SetGlobalNetInt( "fwCampAlertA", 0 )
-            SetGlobalNetInt( "fwCampStressA", 0 ) // start from empty
-            // can't use float rn
-            //SetGlobalNetFloat( "fwCampStressA", 1.0 )
+            SetGlobalNetFloat( "fwCampStressA", 0.0 ) // start from empty
             SetLocationTrackerID( campsite.tracker, 0 )
             file.trackedCampNPCSpawns["A"] <- {}
             continue
@@ -811,9 +761,7 @@ void function InitFWCampSites()
         {
             campsite.campId = "B"
             SetGlobalNetInt( "fwCampAlertB", 0 )
-            SetGlobalNetInt( "fwCampStressB", 0 ) // start from empty
-            // can't use float rn
-            //SetGlobalNetFloat( "fwCampStressB", 1.0 )
+            SetGlobalNetFloat( "fwCampStressB", 0.0 ) // start from empty
             SetLocationTrackerID( campsite.tracker, 1 )
             file.trackedCampNPCSpawns["B"] <- {}
             continue
@@ -822,9 +770,7 @@ void function InitFWCampSites()
         {
             campsite.campId = "C"
             SetGlobalNetInt( "fwCampAlertC", 0 )
-            SetGlobalNetInt( "fwCampStressC", 0 ) // start from empty
-            // can't use float rn
-            //SetGlobalNetFloat( "fwCampStressC", 1.0 )
+            SetGlobalNetFloat( "fwCampStressC", 0.0 ) // start from empty
             SetLocationTrackerID( campsite.tracker, 2 )
             file.trackedCampNPCSpawns["C"] <- {}
             continue
@@ -888,9 +834,7 @@ void function FWAiCampThink( CampSiteStruct campsite )
 
         // update netVars, don't know how client update these, sometimes they can't catch up
         SetGlobalNetInt( alertVarName, alertLevel )
-        SetGlobalNetInt( stressVarName, 1 ) // refill
-        // can't use float rn
-        //SetGlobalNetFloat( stressVarName, 1.0 )
+        SetGlobalNetFloat( stressVarName, 1.0 ) // refill
 
         // under attack, clean this
         campsite.ignoredSinceLastClean = 0
@@ -921,17 +865,14 @@ void function FWAiCampThink( CampSiteStruct campsite )
 
             if( killsNeeded <= 0 ) // check if needs more kills
             {
-                SetGlobalNetInt( stressVarName, 0 ) // empty
-                // can't use float rn
-                //SetGlobalNetFloat( stressVarName, 0.0 ) // empty
+                SetGlobalNetFloat( stressVarName, 0.0 ) // empty
                 AddIgnoredCountToOtherCamps( campsite )
                 break
             }
 
             // update stress bar
             float campStressLeft = float( killsNeeded ) / float( killsToEscalate )
-            // can't use float rn
-            //SetGlobalNetFloat( stressVarName, campStressLeft )
+            SetGlobalNetFloat( stressVarName, campStressLeft )
             //print( "campStressLeft: " + string( campStressLeft ) )
 
             if( maxSpawnCount - npcsLeft >= countPerSpawn && killsNeeded >= countPerSpawn ) // keep spawning
@@ -1795,10 +1736,11 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
 		DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 50 ) // laser core shreds super well for some reason
 
     // plasma railgun can always do no-charge shots and deal same damage
+    if ( damageSourceID == eDamageSourceId.mp_titanweapon_sniper ) // nerf northstar
+        DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 3 )
+
     // leadwall have high pilot damage so works really well aginst harvester
-    if ( damageSourceID == eDamageSourceId.mp_titanweapon_sniper ||
-        damageSourceID == eDamageSourceId.mp_titanweapon_leadwall
-    ) // nerf northstar an ronin
+    if ( damageSourceID == eDamageSourceId.mp_titanweapon_leadwall ) // nerf ronin
         DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 2 )
 
     // missiles mostly have high pilot damage so works really well aginst harvester

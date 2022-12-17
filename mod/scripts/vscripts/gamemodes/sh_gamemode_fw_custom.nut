@@ -24,22 +24,22 @@ void function CreateGamemodeFW()
 	GameMode_SetGameModeAnnouncement( FORT_WAR, "fortwar_modeName" ) 
 	
 	// waiting to be synced with client
-	//GameMode_AddScoreboardColumnData( FORT_WAR, "#SCOREBOARD_KILLS", PGS_KILLS, 2 )
-	//GameMode_AddScoreboardColumnData( FORT_WAR, "#SCOREBOARD_SUPPORT_SCORE", PGS_DEFENSE_SCORE, 4 )
-	//GameMode_AddScoreboardColumnData( FORT_WAR, "#SCOREBOARD_COOP_POINTS", PGS_ASSAULT_SCORE, 6 )
+	GameMode_AddScoreboardColumnData( FORT_WAR, "#SCOREBOARD_KILLS", PGS_KILLS, 2 )
+	GameMode_AddScoreboardColumnData( FORT_WAR, "#SCOREBOARD_SUPPORT_SCORE", PGS_DEFENSE_SCORE, 4 )
+	GameMode_AddScoreboardColumnData( FORT_WAR, "#SCOREBOARD_COOP_POINTS", PGS_ASSAULT_SCORE, 6 )
 
 	AddPrivateMatchMode( FORT_WAR )
 
-		#if SERVER
-			GameMode_AddServerInit( FORT_WAR, GamemodeFW_Init ) // doesn't exist yet lol
-			GameMode_SetPilotSpawnpointsRatingFunc( FORT_WAR, RateSpawnpoints_FW )
-			GameMode_SetTitanSpawnpointsRatingFunc( FORT_WAR, RateSpawnpoints_FW )
-		#elseif CLIENT
-			GameMode_AddClientInit( FORT_WAR, CLGamemodeFW_Init )
-		#endif
-		#if !UI
-			GameMode_AddSharedInit( FORT_WAR, SHGamemodeFW_Init )
-		#endif
+	#if SERVER
+		GameMode_AddServerInit( FORT_WAR, GamemodeFW_Init )
+		GameMode_SetPilotSpawnpointsRatingFunc( FORT_WAR, RateSpawnpoints_FW )
+		GameMode_SetTitanSpawnpointsRatingFunc( FORT_WAR, RateSpawnpoints_FW )
+	#elseif CLIENT
+		GameMode_AddClientInit( FORT_WAR, CLGamemodeFW_Init )
+	#endif
+	#if !UI
+		GameMode_AddSharedInit( FORT_WAR, SHGamemodeFW_Init )
+	#endif
 }
 
 void function FWOnRegisteringNetworkVars()
@@ -70,17 +70,11 @@ void function FWOnRegisteringNetworkVars()
 	RegisterNetworkedVariable( "imcTowerThreatLevel", SNDC_GLOBAL, SNVT_INT )
 	RegisterNetworkedVariable( "milTowerThreatLevel", SNDC_GLOBAL, SNVT_INT )
 	RegisterNetworkedVariable( "fwCampAlertA", SNDC_GLOBAL, SNVT_INT )
-	RegisterNetworkedVariable( "fwCampStressA", SNDC_GLOBAL, SNVT_INT )
-	// waiting to be synced with client
-	//RegisterNetworkedVariable( "fwCampStressA", SNDC_GLOBAL, SNVT_FLOAT_RANGE, 0.0, 0.0, 1.0 )
+	RegisterNetworkedVariable( "fwCampStressA", SNDC_GLOBAL, SNVT_FLOAT_RANGE, 0.0, 0.0, 1.0 )
 	RegisterNetworkedVariable( "fwCampAlertB", SNDC_GLOBAL, SNVT_INT )
-	RegisterNetworkedVariable( "fwCampStressB", SNDC_GLOBAL, SNVT_INT )
-	// waiting to be synced with client
-	//RegisterNetworkedVariable( "fwCampStressB", SNDC_GLOBAL, SNVT_FLOAT_RANGE, 0.0, 0.0, 1.0 )
+	RegisterNetworkedVariable( "fwCampStressB", SNDC_GLOBAL, SNVT_FLOAT_RANGE, 0.0, 0.0, 1.0 )
 	RegisterNetworkedVariable( "fwCampAlertC", SNDC_GLOBAL, SNVT_INT )
-	RegisterNetworkedVariable( "fwCampStressC", SNDC_GLOBAL, SNVT_INT )
-	// waiting to be synced with client
-	//RegisterNetworkedVariable( "fwCampStressC", SNDC_GLOBAL, SNVT_FLOAT_RANGE, 0.0, 0.0, 1.0 )
+	RegisterNetworkedVariable( "fwCampStressC", SNDC_GLOBAL, SNVT_FLOAT_RANGE, 0.0, 0.0, 1.0 )
 	
 	#if CLIENT                  
 		CLFortWar_RegisterNetworkFunctions()
