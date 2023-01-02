@@ -28,7 +28,7 @@ void function CreateGamemodeFW()
 	//GameMode_AddScoreboardColumnData( FORT_WAR, "#SCOREBOARD_SUPPORT_SCORE", PGS_DEFENSE_SCORE, 4 )
 	//GameMode_AddScoreboardColumnData( FORT_WAR, "#SCOREBOARD_COOP_POINTS", PGS_ASSAULT_SCORE, 6 )
 
-	AddPrivateMatchMode( FORT_WAR )
+	//AddPrivateMatchMode( FORT_WAR )
 
 		#if SERVER
 			GameMode_AddServerInit( FORT_WAR, GamemodeFW_Init ) // doesn't exist yet lol

@@ -1809,7 +1809,7 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
     // missiles mostly have high pilot damage so works really well aginst harvester
 	if ( damageSourceID == eDamageSourceId.mp_titanweapon_salvo_rockets ||
 		damageSourceID == eDamageSourceId.mp_titanweapon_shoulder_rockets ||
-        damageSourceID == eDamageSourceId.mp_titnacore_salvo_core
+        damageSourceID == eDamageSourceId.mp_titancore_salvo_core
 	) // titan missiles
 		DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 3 )
     if ( damageSourceID == eDamageSourceId.mp_titanweapon_flightcore_rockets ) // flight core shreds well
