@@ -401,7 +401,7 @@ void function InitFWScoreEvents()
     ScoreEvent_SetEarnMeterValues( "FortWarSecuringGatheredResources", 0.0, 0.05 ) // unused
 
     // tower
-    ScoreEvent_SetEarnMeterValues( "FortWarTowerDamage", 0.0, 0.10, 0.5 ) // using the const FW_HARVESTER_DAMAGE_SEGMENT
+    ScoreEvent_SetEarnMeterValues( "FortWarTowerDamage", 0.0, 0.10, 0.0 ) // using the const FW_HARVESTER_DAMAGE_SEGMENT, titans don't earn
     ScoreEvent_SetEarnMeterValues( "FortWarTowerDefense", 0.0, 0.10, 0.0 ) // titans don't earn
     ScoreEvent_SetEarnMeterValues( "FortWarShieldDestroyed", 0.0, 0.15 )
 
@@ -1808,10 +1808,10 @@ void function OnHarvesterDamaged( entity harvester, var damageInfo )
 
     // missiles mostly have high pilot damage so works really well aginst harvester
 	if ( damageSourceID == eDamageSourceId.mp_titanweapon_salvo_rockets ||
-		damageSourceID == eDamageSourceId.mp_titanweapon_shoulder_rockets
+		damageSourceID == eDamageSourceId.mp_titanweapon_shoulder_rockets ||
+        damageSourceID == eDamageSourceId.mp_titnacore_salvo_core
 	) // titan missiles
 		DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 3 )
-
     if ( damageSourceID == eDamageSourceId.mp_titanweapon_flightcore_rockets ) // flight core shreds well
         DamageInfo_SetDamage( damageInfo, DamageInfo_GetDamage( damageInfo ) / 5 ) 
 
